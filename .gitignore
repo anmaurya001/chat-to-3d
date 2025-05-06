@@ -1,0 +1,53 @@
+# TRELLIS folder (should be cloned separately)
+# TRELLIS/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated files
+*.glb
+*.obj
+*.mtl
+*.blend
+*.blend1
+*.blend2
+prompts.json
+generated_assets/
+
+# Sample files and temporary directories
+TRELLIS/sample.ply
+TRELLIS/sample_*.mp4
+TRELLIS/tmp/
+*.mp4
+*.ply 
