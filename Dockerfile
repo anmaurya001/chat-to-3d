@@ -25,17 +25,13 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 
 # --- Clone Application Repository and Submodules ---
-# Create the parent directory and clone the main repo with submodules (as root)
-# This gets your chat-to-3d code AND the TRELLIS submodule inside /app/repo
-ARG BUILD_TIME=0 # Default value
+ARG BUILD_TIME=0
 
 RUN mkdir -p /app/repo && \
     git clone --recursive https://github.com/anmaurya001/chat-to-3d.git /app/repo
 
 
 # --- Install Dependencies (within the cloned repo structure) ---
-# Set working directory to the TRELLIS submodule for installing its dependencies
-# This is required because some pip installs (like extensions/vox2seq) are relative to the submodule root
 WORKDIR /app/repo/trellis
 
 # Install core PyTorch and torchvision for CUDA 12.1 (as root, from TRELLIS WORKDIR)
@@ -130,10 +126,8 @@ ENV GRADIO_SERVER_PORT="7860"
 
 WORKDIR /app/repo/trellis
 
-
 # Set the entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]
-
 
 # Set the default command (relative to the final WORKDIR)
 CMD ["python", "run.py"]
