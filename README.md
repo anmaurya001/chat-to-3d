@@ -95,8 +95,10 @@ python run_llama.py
 
 2. Start the application in wsl:
 ```bash
-# get into wsl shell and navigate to the repo
+# get into wsl shell 
 Wsl -d NVIDIA-Workbench -u root
+
+# Run the following in wsl
 WINDOWS_USER=$(cmd.exe /c echo %USERNAME% | tr -d '\r')
 export LOCAL_TRELLIS_CACHE="/mnt/c/Users/${WINDOWS_USER}/.trellis/"
 export LOCAL_MODEL_CACHE=~/.cache/3d-guided-bp
