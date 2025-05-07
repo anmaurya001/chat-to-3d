@@ -134,6 +134,7 @@ class ScenePlanningAgent:
     def _initialize_agent(self):
         """Initialize the agent with initial planning rules."""
         try:
+            logger.info(f"Initializing agent with base URL: {AGENT_BASE_URL}")
             prompt_driver = OpenAiChatPromptDriver(
                 model=AGENT_MODEL,
                 base_url=AGENT_BASE_URL,

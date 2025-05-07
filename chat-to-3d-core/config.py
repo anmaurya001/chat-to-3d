@@ -47,4 +47,5 @@ INITIAL_MESSAGE = "Hello! I'm your helpful scene planning assistant. Please desc
 
 # Agent settings
 AGENT_MODEL = "meta/llama-3.1-8b-instruct"
-AGENT_BASE_URL = "http://localhost:8000/v1"
+AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "http://localhost:8000/v1")
+# AGENT_BASE_URL = "http://localhost:8000/v1"
