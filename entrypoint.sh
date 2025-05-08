@@ -10,8 +10,11 @@ export TORCH_HOME="/home/user/.cache/torch"    # Point to the standard Torch sub
 # This handles the case where the volume is newly created or empty on the host
 mkdir -p "$HF_HOME" "$TORCH_HOME" || { echo "FATAL: Failed to create cache subdirectories within the mounted volume."; exit 1; }
 # Use the absolute path to the python executable
+echo "Caching TRELLIS-text-large if not already cached..."
 /usr/bin/python -u -c "from trellis.pipelines import TrellisTextTo3DPipeline; TrellisTextTo3DPipeline.from_pretrained('JeffreyXiang/TRELLIS-text-large')"
-echo "Model download/check complete."
+echo "Caching TRELLIS-text-base if not already cached..."
+/usr/bin/python -u -c "from trellis.pipelines import TrellisTextTo3DPipeline; TrellisTextTo3DPipeline.from_pretrained('JeffreyXiang/TRELLIS-text-base')"
+echo "Model cache complete."
 
 export AGENT_BASE_URL="http://host.containers.internal:8000/v1"
 echo "LLM Server URL set to: $AGENT_BASE_URL"
