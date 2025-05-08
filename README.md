@@ -15,6 +15,7 @@ An application that combines natural language processing with 3D asset generatio
 There are two ways to install and run the application:
 
 ### Method 1: Docker Installation (Recommended)
+Can also use pre built docker image. Refer to the usage section after step 1.
 
 1. Clone this repository:
 ```bash
@@ -89,7 +90,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Method 1: Docker Installation
+### Method 1: Docker Installation/Pre built docker image
 
 1. Start the LLM NIM
 ```bash
@@ -99,6 +100,7 @@ python run_llama.py
 ```
 
 2. Start the application in wsl:
+Locally built image
 ```bash
 # get into wsl shell 
 Wsl -d NVIDIA-Workbench -u root
@@ -113,6 +115,25 @@ chmod -R a+w "$LOCAL_TRELLIS_CACHE"
 chmod -R a+w "$LOCAL_MODEL_CACHE"
 podman run -it --rm --device nvidia.com/gpu=all -p 7860:7860 -v "$LOCAL_MODEL_CACHE:/home/user/.cache" -v  "$LOCAL_TRELLIS_CACHE:/home/user/.trellis/" localhost/chat-to-3d-app:latest
 ```
+OR 
+Pre built image from dockerhub
+```bash
+# get into wsl shell 
+Wsl -d NVIDIA-Workbench -u root
+
+# Run the following in wsl
+# Loging to docker.io
+podman login docker.io
+
+export LOCAL_TRELLIS_CACHE="/mnt/c/Users/${WINDOWS_USER}/.trellis/"
+export LOCAL_MODEL_CACHE=~/.cache/3d-guided-bp
+mkdir -p "$LOCAL_TRELLIS_CACHE"
+mkdir -p "$LOCAL_MODEL_CACHE"
+chmod -R a+w "$LOCAL_TRELLIS_CACHE"
+chmod -R a+w "$LOCAL_MODEL_CACHE"
+podman run -it --rm --device nvidia.com/gpu=all -p 7860:7860 -v "$LOCAL_MODEL_CACHE:/home/user/.cache" -v  "$LOCAL_TRELLIS_CACHE:/home/user/.trellis/" anmaurya548/chat-to-3d:latest
+```
+If asked about which registry to download from choose : docker.io/anmaurya548/chat-to-3d:latest
 
 3. Open your browser to http://localhost:7860
 
