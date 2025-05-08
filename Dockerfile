@@ -100,6 +100,12 @@ RUN useradd -ms /bin/bash user
 # Create the user's standard home directory and standard cache directory (as root)
 RUN mkdir -p /home/user/.cache
 
+# --- Entrypoint Setup ---
+# Copy the entrypoint script from the cloned repository (as root)
+RUN cp /app/repo/entrypoint.sh /entrypoint.sh && \
+    chown user:user /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
 # Change ownership of the cloned code repo and the user's home/cache directories to the non-root user
 RUN chown -R user:user /app/repo /home/user
 
@@ -111,12 +117,6 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 # Set the final working directory to the application logic directory for runtime
 WORKDIR /app/repo/chat-to-3d-core
-
-# --- Entrypoint Setup ---
-# Copy the entrypoint script from the cloned repository
-RUN cp /app/repo/entrypoint.sh /entrypoint.sh && \
-    chown user:user /entrypoint.sh && \
-    chmod +x /entrypoint.sh
 
 # --- Runtime Configuration ---
 EXPOSE 7860
