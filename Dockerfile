@@ -4,6 +4,9 @@ FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
 # Set environment variable for GPU architecture compatibility during compilation
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.7;8.9"
 
+# Define build argument for forcing rebuilds
+ARG FORCE_REBUILD=0
+
 # Install core system packages needed for building and running (as root)
 RUN apt update && apt-get install -yq --no-install-recommends \
     python3 python3-dev git curl ninja-build \
@@ -25,7 +28,6 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 
 # --- Clone Application Repository and Submodules ---
-ARG BUILD_TIME=0
 
 RUN mkdir -p /app/repo && \
     git clone --recursive https://github.com/anmaurya001/chat-to-3d.git /app/repo
@@ -111,11 +113,10 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 WORKDIR /app/repo/chat-to-3d-core
 
 # --- Entrypoint Setup ---
-# Copy the entrypoint script into the container and make it executable
-# Ensure ownership is correct for the 'user'
-
-COPY --chown=user:user entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy the entrypoint script from the cloned repository
+RUN cp /app/repo/entrypoint.sh /entrypoint.sh && \
+    chown user:user /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 # --- Runtime Configuration ---
 EXPOSE 7860

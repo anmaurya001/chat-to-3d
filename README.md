@@ -29,7 +29,12 @@ git clone --recursive https://github.com/anmaurya001/chat-to-3d.git
 # get into wsl shell and navigate to the repo
 Wsl -d NVIDIA-Workbench -u root   
 cd chat-to-3d
+
+# Build with default settings
 podman build -t chat-to-3d-app .
+
+# Or force a rebuild by providing a unique value for FORCE_REBUILD
+podman build --build-arg FORCE_REBUILD=$(date +%s) -t chat-to-3d-app .
 ```
 
 
