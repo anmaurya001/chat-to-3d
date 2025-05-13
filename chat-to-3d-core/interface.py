@@ -359,7 +359,7 @@ class SceneGeneratorInterface:
                             gr.Markdown("### 3. Generate 3D Models")
                             with gr.Row(elem_classes="button-row"):
                                 generate_3d_btn = gr.Button(
-                                    "Generate 3D Model",
+                                    "Generate 3D Model for Selected Object",
                                     interactive=False,
                                     elem_classes="control-element"
                                 )
@@ -370,13 +370,15 @@ class SceneGeneratorInterface:
                                 )
                             
                             # 3D Preview
-                            model_output, download_btn = create_glb_preview()
-                            model_status = gr.Textbox(
-                                label="Generation Status",
-                                lines=2,
-                                interactive=False,
-                                elem_classes="control-element"
-                            )
+                            with gr.Column(elem_classes="preview-container"):
+                                gr.Markdown("#### 3D Model Preview")
+                                model_output, download_btn = create_glb_preview()
+                                model_status = gr.Textbox(
+                                    label="Generation Status",
+                                    lines=2,
+                                    interactive=False,
+                                    elem_classes="control-element"
+                                )
 
                     # Add custom CSS for better spacing
                     gr.HTML("""
@@ -405,6 +407,12 @@ class SceneGeneratorInterface:
                             }
                             .gallery-container {
                                 margin: 20px 0;
+                                padding: 15px;
+                                background-color: white;
+                                border-radius: 8px;
+                            }
+                            .preview-container {
+                                margin-top: 20px;
                                 padding: 15px;
                                 background-color: white;
                                 border-radius: 8px;
@@ -646,7 +654,7 @@ class SceneGeneratorInterface:
                         
                         if not object_name or not all_variants or object_name not in all_variants:
                             logger.warning(f"No variants available for object: {object_name}")
-                            return gr.Button(interactive=False), None, None
+                            return gr.Button(interactive=False), None, None, gr.Button(interactive=False)
                         
                         variants = all_variants[object_name]
                         if evt.index is not None and evt.index < len(variants):
@@ -656,9 +664,10 @@ class SceneGeneratorInterface:
                             return (
                                 gr.Button(interactive=True),  # select_variant_btn
                                 selected_variant['image_path'],  # current_variant_image
-                                evt.index  # selected_variant_index
+                                evt.index,  # selected_variant_index
+                                gr.Button(interactive=True)  # generate_3d_btn
                             )
-                        return gr.Button(interactive=False), None, None
+                        return gr.Button(interactive=False), None, None, gr.Button(interactive=False)
 
                     def select_variant(object_name, variants, selected_variants, selected_idx, all_variants_state):
                         """Handle variant selection."""
@@ -688,14 +697,25 @@ class SceneGeneratorInterface:
                         
                         return gr.update(value=f"Selected variant for {object_name}"), gallery_items
 
-                    def generate_3d_model(variant_image, object_name):
-                        """Generate a 3D model from the selected variant."""
+                    def generate_3d_model(object_name, all_variants_state, selected_idx):
+                        """Generate a 3D model for the selected object using the selected variant."""
                         logger.info(f"Starting 3D model generation for object: {object_name}")
-                        if not variant_image or not object_name:
-                            logger.warning("Missing variant image or object name")
+                        if not object_name or not all_variants_state or object_name not in all_variants_state:
+                            logger.warning("No object selected or no variants available")
+                            return "Please select an object and generate variants first", None, None
+                        
+                        if selected_idx is None:
+                            logger.warning("No variant selected")
                             return "Please select a variant first", None, None
                         
                         try:
+                            # Get the selected variant for the object
+                            variants = all_variants_state[object_name]
+                            if not variants or selected_idx >= len(variants):
+                                return "Invalid variant selection", None, None
+                            
+                            variant = variants[selected_idx]  # Use the selected variant
+                            
                             # Create output directory for this object
                             output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
                             logger.info(f"Creating output directory: {output_dir}")
@@ -704,7 +724,7 @@ class SceneGeneratorInterface:
                             # Generate 3D model
                             logger.info("Calling TRELLIS model for 3D generation")
                             success, message, outputs = self.generator.generate_3d_from_image(
-                                image_path=variant_image,
+                                image_path=variant['image_path'],
                                 output_dir=output_dir
                             )
                             
@@ -717,7 +737,7 @@ class SceneGeneratorInterface:
                             
                             # Update the GLB preview
                             glb_path, _ = update_preview(outputs['glb_path'])
-                            return "Successfully generated 3D model", glb_path, outputs['glb_path']
+                            return f"Successfully generated 3D model for {object_name} (Variant {selected_idx + 1})", glb_path, outputs['glb_path']
                             
                         except Exception as e:
                             logger.error(f"Error generating 3D model: {str(e)}", exc_info=True)
@@ -725,80 +745,123 @@ class SceneGeneratorInterface:
                             glb_path, _ = clear_preview()
                             return error_msg, glb_path, None
 
-                # Set up event handlers for variant generation
-                generate_btn.click(
-                    fn=generate_variants_for_object,
-                    inputs=[
-                        object_dropdown,
-                        seed,
-                        num_variants,
-                        prompt_display,
-                        all_variants_state
-                    ],
-                    outputs=[
-                        generation_status,
-                        current_object_state,
-                        variant_gallery,
-                        all_variants_state
-                    ]
-                )
+                    def generate_3d_for_all_selected(selected_variants):
+                        """Generate 3D models for all selected variants."""
+                        if not selected_variants:
+                            return "No variants selected", None, None
+                        
+                        try:
+                            results = []
+                            last_successful_output = None
+                            
+                            for object_name, variant in selected_variants.items():
+                                # Create output directory for this object
+                                output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
+                                os.makedirs(output_dir, exist_ok=True)
+                                
+                                # Generate 3D model
+                                success, message, outputs = self.generator.generate_3d_from_image(
+                                    image_path=variant['image_path'],
+                                    output_dir=output_dir
+                                )
+                                
+                                if success:
+                                    results.append(f"Successfully generated 3D model for {object_name}")
+                                    last_successful_output = outputs
+                                else:
+                                    results.append(f"Failed to generate 3D model for {object_name}: {message}")
+                            
+                            # Update the GLB preview with the last successful model
+                            if last_successful_output:
+                                glb_path, _ = update_preview(last_successful_output['glb_path'])
+                                return "\n".join(results), glb_path, last_successful_output['glb_path']
+                            else:
+                                return "\n".join(results), None, None
+                            
+                        except Exception as e:
+                            return f"Error during batch 3D generation: {str(e)}", None, None
 
-                # Add handler for generate all variants button
-                generate_all_btn.click(
-                    fn=generate_variants_for_all_objects,
-                    inputs=[seed, num_variants, prompt_display],
-                    outputs=[
-                        generation_status,
-                        object_dropdown,
-                        variant_gallery,
-                        all_variants_state
-                    ]
-                )
+                    # Set up event handlers for variant generation
+                    generate_btn.click(
+                        fn=generate_variants_for_object,
+                        inputs=[
+                            object_dropdown,
+                            seed,
+                            num_variants,
+                            prompt_display,
+                            all_variants_state
+                        ],
+                        outputs=[
+                            generation_status,
+                            current_object_state,
+                            variant_gallery,
+                            all_variants_state
+                        ]
+                    )
 
-                # Add handler for object dropdown to filter variants
-                object_dropdown.change(
-                    fn=filter_variants_by_object,
-                    inputs=[object_dropdown, all_variants_state],
-                    outputs=[variant_gallery]
-                ).then(
-                    fn=lambda x: x,  # Pass through the selected object
-                    inputs=[object_dropdown],
-                    outputs=[current_object_state]
-                ).then(
-                    fn=update_prompt_display,
-                    inputs=[object_dropdown],
-                    outputs=[prompt_display]
-                )
+                    # Add handler for generate all variants button
+                    generate_all_btn.click(
+                        fn=generate_variants_for_all_objects,
+                        inputs=[seed, num_variants, prompt_display],
+                        outputs=[
+                            generation_status,
+                            object_dropdown,
+                            variant_gallery,
+                            all_variants_state
+                        ]
+                    )
 
-                # Enable select variant button when a variant is selected
-                variant_gallery.select(
-                    fn=on_variant_select,
-                    inputs=[current_object_state, all_variants_state],
-                    outputs=[select_variant_btn, current_variant_image, selected_variant_index]
-                )
+                    # Add handler for object dropdown to filter variants
+                    object_dropdown.change(
+                        fn=filter_variants_by_object,
+                        inputs=[object_dropdown, all_variants_state],
+                        outputs=[variant_gallery]
+                    ).then(
+                        fn=lambda x: x,  # Pass through the selected object
+                        inputs=[object_dropdown],
+                        outputs=[current_object_state]
+                    ).then(
+                        fn=update_prompt_display,
+                        inputs=[object_dropdown],
+                        outputs=[prompt_display]
+                    )
 
-                # Handle variant selection
-                select_variant_btn.click(
-                    fn=select_variant,
-                    inputs=[
-                        current_object_state,
-                        current_variants_state,
-                        selected_variants_state,
-                        selected_variant_index,
-                        all_variants_state
-                    ],
-                    outputs=[generation_status, selected_variants_gallery]
-                ).then(
-                    fn=lambda: gr.Button(interactive=True),
-                    outputs=[generate_all_3d_btn]
-                )
+                    # Enable select variant button when a variant is selected
+                    variant_gallery.select(
+                        fn=on_variant_select,
+                        inputs=[current_object_state, all_variants_state],
+                        outputs=[select_variant_btn, current_variant_image, selected_variant_index, generate_3d_btn]
+                    )
 
-                # Add handler for generate all 3D models button
-                generate_all_3d_btn.click(
-                    fn=generate_3d_model,
-                    inputs=[current_variant_image, current_object_state],
-                    outputs=[model_status, model_output, download_btn]
-                )
+                    # Handle variant selection
+                    select_variant_btn.click(
+                        fn=select_variant,
+                        inputs=[
+                            current_object_state,
+                            current_variants_state,
+                            selected_variants_state,
+                            selected_variant_index,
+                            all_variants_state
+                        ],
+                        outputs=[generation_status, selected_variants_gallery]
+                    ).then(
+                        fn=lambda: gr.Button(interactive=True),
+                        outputs=[generate_all_3d_btn]
+                    )
+
+                    # Add handler for generate all 3D models button
+                    generate_all_3d_btn.click(
+                        fn=generate_3d_for_all_selected,
+                        inputs=[selected_variants_state],
+                        outputs=[model_status, model_output, download_btn]
+                    )
+
+                    # Connect the generate_3d_model function to the preview
+                    generate_3d_btn.click(
+                        generate_3d_model,
+                        inputs=[current_object_state, all_variants_state, selected_variant_index],
+                        outputs=[model_status, model_output, download_btn]
+                    )
 
                 # Update object list when the tab is selected
                 demo.load(fn=update_object_list, outputs=[object_dropdown, generation_status])
