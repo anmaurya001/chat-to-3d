@@ -111,6 +111,11 @@ class ScenePlanningAgent:
                 "You are now in 3D prompt generation mode. Your task is to create detailed prompts for each object in the scene."
             ),
             Rule(
+                "Each prompt MUST start with the object type followed by a comma, then describe its characteristics."
+                "\nExample: 'Beach Chair, ergonomic with curved backrest...'"
+                "\nExample: 'Beach Umbrella, colorful striped canopy...'"
+            ),
+            Rule(
                 "Focus ONLY on the physical and visual characteristics of each object."
             ),
             Rule(
@@ -119,7 +124,6 @@ class ScenePlanningAgent:
                 "\n- Materials and textures"
                 "\n- Colors and patterns"
                 "\n- Specific features and details"
-
             ),
             Rule(
                 "DO NOT include any information about:"
@@ -148,6 +152,12 @@ class ScenePlanningAgent:
             ),
             Rule(
                 "Focus on details that will help create an accurate 3D model of the object."
+            ),
+            Rule(
+                "The first word of each prompt MUST be the object type, followed by a comma."
+                "\nExample: 'Beach Chair, ergonomic with...'"
+                "\nExample: 'Beach Umbrella, colorful with...'"
+                "\nExample: 'Beach Towel, soft and plush...'"
             ),
         ]
 
