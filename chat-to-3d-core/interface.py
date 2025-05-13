@@ -273,6 +273,14 @@ class SceneGeneratorInterface:
                                     interactive=True
                                 )
                             
+                            # Add prompt display and editing
+                            prompt_display = gr.Textbox(
+                                label="Generation Prompt",
+                                lines=3,
+                                interactive=True,
+                                value=""
+                            )
+                            
                             # Generation controls
                             generate_btn = gr.Button("Generate Variants")
                             generate_all_btn = gr.Button("Generate Variants for All Objects")
@@ -399,64 +407,102 @@ class SceneGeneratorInterface:
                             )
                             return gallery
 
-                    def generate_variants_for_object(
-                        object_name,
-                        seed,
-                        num_variants
-                    ):
-                        """Generate variants for the selected object."""
+                    def generate_variants_for_all_objects(seed, num_variants, prompt_display):
+                        """Generate variants for all objects in the prompts file."""
                         try:
-                            if not object_name:
-                                logger.warning("No object selected")
-                                return (
-                                    "Please select an object first",
-                                    None,
-                                    []
-                                )
-                            
-                            logger.info(f"Generating variants for object: {object_name}")
-                            
                             if not os.path.exists(PROMPTS_FILE):
-                                logger.error(f"Prompts file not found at: {PROMPTS_FILE}")
-                                return (
-                                    "Please generate prompts first in the Chat & Generate Prompts tab",
-                                    None,
-                                    []
-                                )
+                                return "Please generate prompts first in the Chat & Generate Prompts tab", None, [], {}
                             
                             # Read prompts file
-                            logger.info(f"Reading prompts file for object: {object_name}")
                             with open(PROMPTS_FILE, 'r') as f:
                                 data = json.load(f)
-                                logger.info(f"Prompts file contents: {json.dumps(data, indent=2)}")
+                            
+                            all_variants = {}
+                            total_objects = len([obj for scene in data['scenes'] for obj in scene['objects']])
+                            processed_objects = 0
+                            
+                            # Get the current selected object
+                            current_object = object_dropdown.value
+                            
+                            for scene in data['scenes']:
+                                for obj in scene['objects']:
+                                    object_name = obj['name']
+                                    # Use edited prompt only for the currently selected object
+                                    object_prompt = prompt_display if object_name == current_object else obj['prompt']
+                                    
+                                    # Create output directory for this object
+                                    object_dir = os.path.join(OUTPUT_DIR, object_name)
+                                    os.makedirs(object_dir, exist_ok=True)
+                                    
+                                    # Generate variants
+                                    success, message, variants = self.generator.generate_variants(
+                                        prompt=object_prompt,
+                                        output_dir=object_dir,
+                                        num_variants=num_variants,
+                                        seed=seed + processed_objects  # Use different seed for each object
+                                    )
+                                    
+                                    if success:
+                                        all_variants[object_name] = variants
+                                    
+                                    processed_objects += 1
+                            
+                            if not all_variants:
+                                return "Failed to generate variants for any objects", None, [], {}
+                            
+                            # Get list of object names for the dropdown
+                            object_names = list(all_variants.keys())
+                            selected_object = object_names[0] if object_names else None
+                            
+                            # Create a list of variants for the selected object only
+                            selected_variants = []
+                            if selected_object and selected_object in all_variants:
+                                selected_variants = [
+                                    (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
+                                    for i, v in enumerate(all_variants[selected_object])
+                                ]
+                            
+                            return (
+                                f"Successfully generated variants for {len(all_variants)} objects",
+                                selected_object,
+                                selected_variants,
+                                all_variants  # Return all variants for state
+                            )
+                        except Exception as e:
+                            return f"Error during batch generation: {str(e)}", None, [], {}
+
+                    def generate_variants_for_object(object_name, seed, num_variants, prompt_display):
+                        """Generate variants for a single object."""
+                        try:
+                            if not object_name:
+                                return "Please select an object first", None, []
+                            
+                            if not os.path.exists(PROMPTS_FILE):
+                                return "Please generate prompts first in the Chat & Generate Prompts tab", None, []
+                            
+                            # Read prompts file
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
                             
                             # Find the object's prompt
                             object_prompt = None
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
-                                    logger.info(f"Checking object: {obj['name']} against {object_name}")
                                     if obj['name'] == object_name:
-                                        object_prompt = obj['prompt']
-                                        logger.info(f"Found prompt for {object_name}: {object_prompt}")
+                                        # Use edited prompt if available
+                                        object_prompt = prompt_display if prompt_display else obj['prompt']
                                         break
                                 if object_prompt:
                                     break
                             
                             if not object_prompt:
-                                logger.error(f"Object '{object_name}' not found in prompts file")
-                                return (
-                                    f"Object '{object_name}' not found in prompts file",
-                                    None,
-                                    []
-                                )
+                                return f"Object '{object_name}' not found in prompts file", None, []
                             
                             # Create output directory for this object
                             object_dir = os.path.join(OUTPUT_DIR, object_name)
                             os.makedirs(object_dir, exist_ok=True)
-                            logger.info(f"Created output directory: {object_dir}")
                             
-                            # Generate variants using SANA
-                            logger.info(f"Generating variants for {object_name} with prompt: {object_prompt}")
+                            # Generate variants
                             success, message, variants = self.generator.generate_variants(
                                 prompt=object_prompt,
                                 output_dir=object_dir,
@@ -465,32 +511,21 @@ class SceneGeneratorInterface:
                             )
                             
                             if not success:
-                                logger.error(f"Failed to generate variants: {message}")
-                                return (
-                                    f"Error: {message}",
-                                    None,
-                                    []
-                                )
+                                return f"Error: {message}", None, []
                             
-                            logger.info(f"Successfully generated {len(variants)} variants")
-                            # Update gallery with generated variants
+                            # Create gallery items
                             gallery_items = [
-                                (v['image_path'], f"Variant {i+1} (Seed: {v['seed']})")
+                                (v['image_path'], f"{object_name} - Variant {i+1} (Seed: {v['seed']})")
                                 for i, v in enumerate(variants)
                             ]
                             
                             return (
                                 f"Successfully generated {len(variants)} variants",
                                 object_name,
-                                variants
+                                gallery_items
                             )
                         except Exception as e:
-                            logger.error(f"Error during generation: {str(e)}")
-                            return (
-                                f"Error during generation: {str(e)}",
-                                None,
-                                []
-                            )
+                            return f"Error during generation: {str(e)}", None, []
 
                     def on_variant_select(variants, evt: gr.SelectData):
                         """Handle variant selection in gallery."""
@@ -588,66 +623,6 @@ class SceneGeneratorInterface:
                         outputs=[model_output, download_btn]
                     )
 
-                    def generate_variants_for_all_objects(seed, num_variants):
-                        """Generate variants for all objects in the prompts file."""
-                        try:
-                            if not os.path.exists(PROMPTS_FILE):
-                                return "Please generate prompts first in the Chat & Generate Prompts tab", None, [], {}
-                            
-                            # Read prompts file
-                            with open(PROMPTS_FILE, 'r') as f:
-                                data = json.load(f)
-                            
-                            all_variants = {}
-                            total_objects = len([obj for scene in data['scenes'] for obj in scene['objects']])
-                            processed_objects = 0
-                            
-                            for scene in data['scenes']:
-                                for obj in scene['objects']:
-                                    object_name = obj['name']
-                                    object_prompt = obj['prompt']
-                                    
-                                    # Create output directory for this object
-                                    object_dir = os.path.join(OUTPUT_DIR, object_name)
-                                    os.makedirs(object_dir, exist_ok=True)
-                                    
-                                    # Generate variants
-                                    success, message, variants = self.generator.generate_variants(
-                                        prompt=object_prompt,
-                                        output_dir=object_dir,
-                                        num_variants=num_variants,
-                                        seed=seed + processed_objects  # Use different seed for each object
-                                    )
-                                    
-                                    if success:
-                                        all_variants[object_name] = variants
-                                    
-                                    processed_objects += 1
-                            
-                            if not all_variants:
-                                return "Failed to generate variants for any objects", None, [], {}
-                            
-                            # Get list of object names for the dropdown
-                            object_names = list(all_variants.keys())
-                            selected_object = object_names[0] if object_names else None
-                            
-                            # Create a list of variants for the selected object only
-                            selected_variants = []
-                            if selected_object and selected_object in all_variants:
-                                selected_variants = [
-                                    (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
-                                    for i, v in enumerate(all_variants[selected_object])
-                                ]
-                            
-                            return (
-                                f"Successfully generated variants for {len(all_variants)} objects",
-                                selected_object,
-                                selected_variants,
-                                all_variants  # Return all variants for state
-                            )
-                        except Exception as e:
-                            return f"Error during batch generation: {str(e)}", None, [], {}
-
                     def filter_variants_by_object(selected_object, all_variants):
                         """Filter variants to show only those for the selected object."""
                         if not selected_object or not all_variants:
@@ -694,29 +669,45 @@ class SceneGeneratorInterface:
                         except Exception as e:
                             return f"Error during batch 3D generation: {str(e)}", None, None
 
+                    def update_prompt_display(selected_object):
+                        """Update the prompt display when an object is selected."""
+                        try:
+                            if not selected_object or not os.path.exists(PROMPTS_FILE):
+                                return ""
+                            
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
+                            
+                            for scene in data['scenes']:
+                                for obj in scene['objects']:
+                                    if obj['name'] == selected_object:
+                                        return obj['prompt']
+                            
+                            return ""
+                        except Exception as e:
+                            logger.error(f"Error updating prompt display: {e}")
+                            return ""
+
                 # Set up event handlers for variant generation
                 generate_btn.click(
                     fn=generate_variants_for_object,
                     inputs=[
                         object_dropdown,
                         seed,
-                        num_variants
+                        num_variants,
+                        prompt_display
                     ],
                     outputs=[
                         generation_status,
                         current_object_state,
-                        current_variants_state
+                        variant_gallery
                     ]
-                ).then(
-                    fn=lambda variants: [(v['image_path'], f"Variant {i+1} (Seed: {v['seed']})") for i, v in enumerate(variants)] if variants else [],
-                    inputs=[current_variants_state],
-                    outputs=[variant_gallery]
                 )
 
                 # Add handler for generate all variants button
                 generate_all_btn.click(
                     fn=generate_variants_for_all_objects,
-                    inputs=[seed, num_variants],
+                    inputs=[seed, num_variants, prompt_display],
                     outputs=[
                         generation_status,
                         object_dropdown,
@@ -801,6 +792,13 @@ class SceneGeneratorInterface:
                     on_generate_prompts,
                     [chatbot, accepted_objects_state],
                     [prompts_output, generation_prompt_display, object_dropdown, generation_status]
+                )
+
+                # Add handler for object dropdown to update prompt display
+                object_dropdown.change(
+                    fn=update_prompt_display,
+                    inputs=[object_dropdown],
+                    outputs=[prompt_display]
                 )
 
         return demo
