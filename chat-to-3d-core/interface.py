@@ -2,6 +2,7 @@ import gradio as gr
 from agent import ScenePlanningAgent
 from generator import AssetGenerator
 from utils import delete_prompts_file
+from glb_preview import create_glb_preview, update_preview, clear_preview
 from config import (
     DEFAULT_SEED,
     DEFAULT_SPARSE_STEPS,
@@ -11,6 +12,11 @@ from config import (
     INITIAL_MESSAGE,
     DEFAULT_TRELLIS_MODEL,
 )
+import json
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SceneGeneratorInterface:
@@ -194,41 +200,6 @@ class SceneGeneratorInterface:
                         
                         return selected_objects, gr.update(value=accepted_html)
 
-                    # Set up event handlers
-                    clear_btn.click(
-                        fn=clear_chat,
-                        inputs=[],
-                        outputs=[
-                            chatbot,
-                            msg,
-                            suggested_objects_checkboxes,
-                            suggested_objects_state,
-                            accepted_objects_state,
-                            accepted_objects_display,
-                            prompts_output,
-                            generation_prompt_display
-                        ]
-                    )
-                    
-                    submit_btn.click(
-                        respond, 
-                        [msg, chatbot, suggested_objects_state, accepted_objects_state], 
-                        [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
-                    )
-                    
-                    msg.submit(
-                        respond, 
-                        [msg, chatbot, suggested_objects_state, accepted_objects_state], 
-                        [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
-                    )
-
-                    # Handle checkbox changes
-                    suggested_objects_checkboxes.change(
-                        update_accepted_objects,
-                        [suggested_objects_checkboxes],
-                        [accepted_objects_state, accepted_objects_display]
-                    )
-
                     def on_generate_prompts(chat_history, accepted_objects):
                         """Generate 3D prompts for the accepted objects."""
                         if not accepted_objects:
@@ -236,7 +207,7 @@ class SceneGeneratorInterface:
                                 value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
                                       "<p style='margin: 0; color: #dc3545;'>Please select at least one object from the suggested list before generating prompts.</p>"
                                       "</div>"
-                            ), ""
+                            ), "", gr.update(choices=[], value=None, interactive=False), "Please select objects first"
                         
                         try:
                             # Get the last user message as scene description
@@ -253,7 +224,7 @@ class SceneGeneratorInterface:
                                     value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
                                           "<p style='margin: 0; color: #dc3545;'>Error generating prompts. Please try again.</p>"
                                           "</div>"
-                                ), ""
+                                ), "", gr.update(choices=[], value=None, interactive=False), "Error generating prompts"
                             
                             # Format prompts for display
                             prompts_html = "<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
@@ -266,128 +237,416 @@ class SceneGeneratorInterface:
                                 """
                             prompts_html += "</div>"
                             
-                            return gr.update(value=prompts_html), generation_prompt
+                            # Update object list immediately after generating prompts
+                            objects = list(prompts.keys())
+                            return (
+                                gr.update(value=prompts_html),
+                                generation_prompt,
+                                gr.update(choices=objects, value=objects[0] if objects else None, interactive=True),
+                                "Ready to generate variants"
+                            )
                         except Exception as e:
                             return gr.update(
                                 value=f"<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
                                       f"<p style='margin: 0; color: #dc3545;'>Error generating prompts: {str(e)}</p>"
                                       f"</div>"
-                            ), ""
+                            ), "", gr.update(choices=[], value=None, interactive=False), f"Error: {str(e)}"
 
-                    # Add event handler for generate prompts button
-                    generate_prompts_btn.click(
-                        on_generate_prompts,
-                        [chatbot, accepted_objects_state],
-                        [prompts_output, generation_prompt_display]
-                    )
-
-                with gr.TabItem("Generate 3D Assets"):
-                    # Info section at the top
-                    with gr.Group():
-                        gr.Markdown("### File Locations")
-                        with gr.Row():
-                            prompts_file = gr.Textbox(
-                                label="Prompts JSON File",
-                                value=str(PROMPTS_FILE),
-                                interactive=False,
-                                show_copy_button=True
-                            )
-                            output_dir = gr.Textbox(
-                                label="Assets Directory",
-                                value=str(OUTPUT_DIR),
-                                interactive=False,
-                                show_copy_button=True
-                            )
-
+                with gr.TabItem("Generate & Select Variants"):
                     with gr.Row():
-                        # Model selection - default to base model
-                        model_choice = gr.Radio(
-                            choices=["TRELLIS-text-large", "TRELLIS-text-base"],
-                            value=DEFAULT_TRELLIS_MODEL,  # Use default from config
-                            label="TRELLIS Model",
-                            interactive=True
-                        )
-                        
-                        seed = gr.Number(
-                            label="Random Seed", value=DEFAULT_SEED, interactive=True
-                        )
+                        # Left Column - Generation Settings
+                        with gr.Column(scale=1):
+                            gr.Markdown("### Generation Settings")
+                            
+                            # Generation parameters
+                            with gr.Group():
+                                seed = gr.Number(
+                                    label="Random Seed",
+                                    value=DEFAULT_SEED,
+                                    interactive=True
+                                )
+                                num_variants = gr.Number(
+                                    label="Number of Variants",
+                                    value=3,
+                                    minimum=1,
+                                    maximum=5,
+                                    interactive=True
+                                )
+                            
+                            # Generation controls
+                            generate_btn = gr.Button("Generate Variants")
+                            generation_status = gr.Textbox(
+                                label="Generation Status",
+                                lines=2,
+                                interactive=False
+                            )
 
-                    with gr.Row():
-                        sparse_steps = gr.Number(
-                            label="Sparse Structure Steps",
-                            value=DEFAULT_SPARSE_STEPS,
-                            interactive=True,
-                        )
-                        slat_steps = gr.Number(
-                            label="Slat Sampler Steps",
-                            value=DEFAULT_SLAT_STEPS,
-                            interactive=True,
-                        )
+                        # Right Column - Variant Selection
+                        with gr.Column(scale=2):
+                            gr.Markdown("### Variant Selection")
+                            
+                            # Object selection
+                            object_dropdown = gr.Dropdown(
+                                label="Select Object",
+                                choices=[],
+                                interactive=True
+                            )
+                            
+                            # Variant gallery
+                            variant_gallery = gr.Gallery(
+                                label="Generated Variants",
+                                show_label=True,
+                                elem_id="variant_gallery",
+                                columns=3,
+                                rows=1,
+                                height="auto",
+                                allow_preview=True,
+                                show_download_button=False,
+                                object_fit="contain",
+                                value=[]  # Initialize with empty list
+                            )
+                            
+                            # Selection controls
+                            select_variant_btn = gr.Button("Select This Variant")
+                            generate_3d_btn = gr.Button("Generate 3D Model", interactive=False)
+                            selected_variants = gr.HTML(
+                                label="Selected Variants",
+                                value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                                      "<p style='margin: 0; color: #6c757d;'>No variants selected yet</p>"
+                                      "</div>"
+                            )
+                            
+                            # 3D Preview
+                            gr.Markdown("### 3D Model Preview")
+                            # model_preview = gr.Video(
+                            #     label="3D Model Preview",
+                            #     autoplay=True,
+                            #     loop=True,
+                            #     height=300
+                            # )
+                            model_status = gr.Textbox(
+                                label="Generation Status",
+                                lines=2,
+                                interactive=False
+                            )
 
-                    delete_existing = gr.Checkbox(
-                        label="Delete existing output directory", value=False
-                    )
+                    # State components
+                    current_object_state = gr.State(None)
+                    current_variants_state = gr.State([])
+                    selected_variants_state = gr.State({})
+                    current_variant_image = gr.State(None)
+                    selected_variant_index = gr.State(None)  # Add state for selected index
 
-                    generate_btn = gr.Button("Generate Assets")
-                    output = gr.Textbox(label="Generation Progress", lines=10)
-
-                    # Debug section for model switching
-                    # with gr.Group():
-                    #     gr.Markdown("### Debug Model Switching")
-                    #     debug_model_choice = gr.Radio(
-                    #         choices=["TRELLIS-text-large", "TRELLIS-text-base"],
-                    #         value=DEFAULT_TRELLIS_MODEL,
-                    #         label="Switch Model",
-                    #         interactive=True
-                    #     )
-                    #     debug_switch_btn = gr.Button("Switch Model & Check VRAM")
-                    #     debug_output = gr.Textbox(label="Debug Output", lines=5)
-
-                    #     def debug_switch_model(model_name):
-                    #         success, message = self.generator.debug_switch_model(model_name)
-                    #         return message
-
-                    #     debug_switch_btn.click(
-                    #         debug_switch_model,
-                    #         inputs=[debug_model_choice],
-                    #         outputs=debug_output
-                    #     )
-
-
-                    def generate_assets_with_progress(prompts_file, output_dir, delete_existing, model_choice, seed, sparse_steps, slat_steps):
+                    def update_object_list():
+                        """Update the object dropdown with objects from the prompts file."""
                         try:
-                            # Disable button immediately
-                            disable_btn = gr.update(interactive=False)
+                            if not os.path.exists(PROMPTS_FILE):
+                                logger.error(f"Prompts file not found at: {PROMPTS_FILE}")
+                                return gr.update(
+                                    choices=[],
+                                    value=None,
+                                    interactive=False
+                                ), "Please generate prompts first in the Chat & Generate Prompts tab"
+                            
+                            logger.info(f"Reading prompts file from: {PROMPTS_FILE}")
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
+                                logger.info(f"Prompts file contents: {json.dumps(data, indent=2)}")
+                                objects = [obj['name'] for scene in data['scenes'] for obj in scene['objects']]
+                                logger.info(f"Found objects: {objects}")
+                            
+                            if not objects:
+                                logger.warning("No objects found in prompts file")
+                                return gr.update(
+                                    choices=[],
+                                    value=None,
+                                    interactive=False
+                                ), "No objects found in prompts file. Please generate prompts first."
+                            
+                            return gr.update(
+                                choices=objects,
+                                value=objects[0] if objects else None,  # Select first object by default
+                                interactive=True
+                            ), "Ready to generate variants"
+                        except Exception as e:
+                            logger.error(f"Error reading prompts file: {str(e)}")
+                            return gr.update(
+                                choices=[],
+                                value=None,
+                                interactive=False
+                            ), f"Error reading prompts file: {str(e)}"
 
-                            # Show intermediate state
-                            yield disable_btn, "Starting generation..."
-
-                            # Do the actual generation
-                            result = self.generator.generate_all_assets(
-                                prompts_file,
-                                output_dir,
-                                delete_existing,
-                                seed,
-                                sparse_steps,
-                                slat_steps,
-                                model_name=model_choice,
-                                progress=gr.Progress()
+                    def generate_variants_for_object(
+                        object_name,
+                        seed,
+                        num_variants
+                    ):
+                        """Generate variants for the selected object."""
+                        try:
+                            if not object_name:
+                                logger.warning("No object selected")
+                                return (
+                                    "Please select an object first",
+                                    None,
+                                    []
+                                )
+                            
+                            logger.info(f"Generating variants for object: {object_name}")
+                            
+                            if not os.path.exists(PROMPTS_FILE):
+                                logger.error(f"Prompts file not found at: {PROMPTS_FILE}")
+                                return (
+                                    "Please generate prompts first in the Chat & Generate Prompts tab",
+                                    None,
+                                    []
+                                )
+                            
+                            # Read prompts file
+                            logger.info(f"Reading prompts file for object: {object_name}")
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
+                                logger.info(f"Prompts file contents: {json.dumps(data, indent=2)}")
+                            
+                            # Find the object's prompt
+                            object_prompt = None
+                            for scene in data['scenes']:
+                                for obj in scene['objects']:
+                                    logger.info(f"Checking object: {obj['name']} against {object_name}")
+                                    if obj['name'] == object_name:
+                                        object_prompt = obj['prompt']
+                                        logger.info(f"Found prompt for {object_name}: {object_prompt}")
+                                        break
+                                if object_prompt:
+                                    break
+                            
+                            if not object_prompt:
+                                logger.error(f"Object '{object_name}' not found in prompts file")
+                                return (
+                                    f"Object '{object_name}' not found in prompts file",
+                                    None,
+                                    []
+                                )
+                            
+                            # Create output directory for this object
+                            object_dir = os.path.join(OUTPUT_DIR, object_name)
+                            os.makedirs(object_dir, exist_ok=True)
+                            logger.info(f"Created output directory: {object_dir}")
+                            
+                            # Generate variants using SANA
+                            logger.info(f"Generating variants for {object_name} with prompt: {object_prompt}")
+                            success, message, variants = self.generator.generate_variants(
+                                prompt=object_prompt,
+                                output_dir=object_dir,
+                                num_variants=num_variants,
+                                seed=seed
+                            )
+                            
+                            if not success:
+                                logger.error(f"Failed to generate variants: {message}")
+                                return (
+                                    f"Error: {message}",
+                                    None,
+                                    []
+                                )
+                            
+                            logger.info(f"Successfully generated {len(variants)} variants")
+                            # Update gallery with generated variants
+                            gallery_items = [
+                                (v['image_path'], f"Variant {i+1} (Seed: {v['seed']})")
+                                for i, v in enumerate(variants)
+                            ]
+                            
+                            return (
+                                f"Successfully generated {len(variants)} variants",
+                                object_name,
+                                variants
+                            )
+                        except Exception as e:
+                            logger.error(f"Error during generation: {str(e)}")
+                            return (
+                                f"Error during generation: {str(e)}",
+                                None,
+                                []
                             )
 
-                            # Re-enable button & return result
-                            enable_btn = gr.update(interactive=True)
-                            yield enable_btn, result
+                    def on_variant_select(variants, evt: gr.SelectData):
+                        """Handle variant selection in gallery."""
+                        logger.info(f"Variant selected: {evt.index}")
+                        if not variants:
+                            return gr.Button(interactive=False), None, None
+                        
+                        if evt.index is not None and evt.index < len(variants):
+                            return gr.Button(interactive=True), variants[evt.index]['image_path'], evt.index
+                        return gr.Button(interactive=False), None, None
 
+                    def select_variant(object_name, variants, selected_variants, selected_idx):
+                        """Handle variant selection."""
+                        logger.info(f"Selecting variant with index: {selected_idx}")
+                        if not object_name or not variants:
+                            return gr.update(value="No variants available to select")
+                        
+                        if selected_idx is None or selected_idx >= len(variants):
+                            return gr.update(value="Please select a variant from the gallery")
+                        
+                        selected_variant = variants[selected_idx]
+                        
+                        # Update selected variants
+                        selected_variants[object_name] = selected_variant
+                        
+                        # Format the selected variants display
+                        html = "<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                        if selected_variants:
+                            html += "<ul style='margin: 0; padding-left: 20px;'>"
+                            for obj_name, variant in selected_variants.items():
+                                html += f"""
+                                    <li style='margin: 5px 0; color: #212529;'>
+                                        <strong>{obj_name}</strong>
+                                        <br>
+                                        <small style='color: #6c757d;'>Seed: {variant['seed']}</small>
+                                    </li>
+                                """
+                            html += "</ul>"
+                        else:
+                            html += "<p style='margin: 0; color: #6c757d;'>No variants selected yet</p>"
+                        html += "</div>"
+                        
+                        return gr.update(value=html)
+
+                    def generate_3d_model(variant_image, object_name):
+                        """Generate a 3D model from the selected variant."""
+                        logger.info(f"Starting 3D model generation for object: {object_name}")
+                        if not variant_image or not object_name:
+                            logger.warning("Missing variant image or object name")
+                            return "Please select a variant first", None, None
+                        
+                        try:
+                            # Create output directory for this object
+                            output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
+                            logger.info(f"Creating output directory: {output_dir}")
+                            os.makedirs(output_dir, exist_ok=True)
+                            
+                            # Generate 3D model
+                            logger.info("Calling TRELLIS model for 3D generation")
+                            success, message, outputs = self.generator.generate_3d_from_image(
+                                image_path=variant_image,
+                                output_dir=output_dir
+                            )
+                            
+                            if not success:
+                                logger.error(f"3D generation failed: {message}")
+                                return message, None, None
+                            
+                            logger.info("3D model generation completed successfully")
+                            logger.info(f"Output GLB path: {outputs['glb_path']}")
+                            
+                            # Update the GLB preview
+                            glb_path, _ = update_preview(outputs['glb_path'])
+                            return "Successfully generated 3D model", glb_path, outputs['glb_path']
+                            
                         except Exception as e:
-                            enable_btn = gr.update(interactive=True)
-                            yield enable_btn, f"Error during generation: {str(e)}"
+                            logger.error(f"Error generating 3D model: {str(e)}", exc_info=True)
+                            error_msg = f"Error generating 3D model: {str(e)}"
+                            glb_path, _ = clear_preview()
+                            return error_msg, glb_path, None
 
-                    generate_btn.click(
-                        fn=generate_assets_with_progress,
-                        inputs=[prompts_file, output_dir, delete_existing, model_choice, seed, sparse_steps, slat_steps],
-                        outputs=[generate_btn, output]
+                    # Add GLB preview components
+                    model_output, download_btn = create_glb_preview()
+
+                    # Connect the generate_3d_model function to the preview
+                    generate_3d_btn.click(
+                        generate_3d_model,
+                        inputs=[current_variant_image, current_object_state],
+                        outputs=[model_status, model_output, download_btn]
                     )
 
+                    # Clear preview when clearing chat
+                    clear_btn.click(
+                        lambda: clear_preview(),
+                        outputs=[model_output, download_btn]
+                    )
+
+                # Set up event handlers for variant generation
+                generate_btn.click(
+                    fn=generate_variants_for_object,
+                    inputs=[
+                        object_dropdown,
+                        seed,
+                        num_variants
+                    ],
+                    outputs=[
+                        generation_status,
+                        current_object_state,
+                        current_variants_state
+                    ]
+                ).then(
+                    fn=lambda variants: [(v['image_path'], f"Variant {i+1} (Seed: {v['seed']})") for i, v in enumerate(variants)] if variants else [],
+                    inputs=[current_variants_state],
+                    outputs=[variant_gallery]
+                )
+
+                # Handle variant selection
+                select_variant_btn.click(
+                    fn=select_variant,
+                    inputs=[
+                        current_object_state,
+                        current_variants_state,
+                        selected_variants_state,
+                        selected_variant_index
+                    ],
+                    outputs=[selected_variants]
+                )
+
+                # Enable 3D generation button when a variant is selected
+                variant_gallery.select(
+                    fn=on_variant_select,
+                    inputs=[current_variants_state],
+                    outputs=[generate_3d_btn, current_variant_image, selected_variant_index]
+                )
+
+                # Update object list when the tab is selected
+                demo.load(fn=update_object_list, outputs=[object_dropdown, generation_status])
+
+                # Set up event handlers for chat and prompt generation
+                clear_btn.click(
+                    fn=clear_chat,
+                    inputs=[],
+                    outputs=[
+                        chatbot,
+                        msg,
+                        suggested_objects_checkboxes,
+                        suggested_objects_state,
+                        accepted_objects_state,
+                        accepted_objects_display,
+                        prompts_output,
+                        generation_prompt_display
+                    ]
+                )
+                
+                submit_btn.click(
+                    respond, 
+                    [msg, chatbot, suggested_objects_state, accepted_objects_state], 
+                    [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
+                )
+                
+                msg.submit(
+                    respond, 
+                    [msg, chatbot, suggested_objects_state, accepted_objects_state], 
+                    [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
+                )
+
+                # Handle checkbox changes
+                suggested_objects_checkboxes.change(
+                    update_accepted_objects,
+                    [suggested_objects_checkboxes],
+                    [accepted_objects_state, accepted_objects_display]
+                )
+
+                # Add event handler for generate prompts button
+                generate_prompts_btn.click(
+                    on_generate_prompts,
+                    [chatbot, accepted_objects_state],
+                    [prompts_output, generation_prompt_display, object_dropdown, generation_status]
+                )
 
         return demo
 

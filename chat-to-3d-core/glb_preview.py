@@ -1,0 +1,46 @@
+import gradio as gr
+from gradio_litmodel3d import LitModel3D
+import os
+
+def create_glb_preview():
+    """
+    Creates a GLB preview component using gradio_litmodel3d.
+    
+    Returns:
+        tuple: (model_output, download_button) - The 3D model viewer and download button components
+    """
+    with gr.Row():
+        model_output = LitModel3D(
+            label="3D Model Preview",
+            exposure=10.0,
+            height=400
+        )
+        download_btn = gr.DownloadButton(
+            label="Download GLB",
+            interactive=False
+        )
+    
+    return model_output, download_btn
+
+def update_preview(glb_path: str) -> tuple:
+    """
+    Updates the GLB preview with a new model.
+    
+    Args:
+        glb_path (str): Path to the GLB file
+        
+    Returns:
+        tuple: (glb_path, True) - The GLB path and True to enable the download button
+    """
+    if not os.path.exists(glb_path):
+        return None, False
+    return glb_path, True
+
+def clear_preview() -> tuple:
+    """
+    Clears the GLB preview.
+    
+    Returns:
+        tuple: (None, False) - Clears the preview and disables the download button
+    """
+    return None, False 
