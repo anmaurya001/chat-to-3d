@@ -253,113 +253,172 @@ class SceneGeneratorInterface:
                             ), "", gr.update(choices=[], value=None, interactive=False), f"Error: {str(e)}"
 
                 with gr.TabItem("Generate & Select Variants"):
-                    with gr.Row():
-                        # Left Column - Generation Settings
-                        with gr.Column(scale=1):
-                            gr.Markdown("### Generation Settings")
-                            
-                            # Generation parameters
-                            with gr.Group():
-                                seed = gr.Number(
-                                    label="Random Seed",
-                                    value=DEFAULT_SEED,
-                                    interactive=True
-                                )
-                                num_variants = gr.Number(
-                                    label="Number of Variants",
-                                    value=3,
-                                    minimum=1,
-                                    maximum=5,
-                                    interactive=True
-                                )
-                            
-                            # Add prompt display and editing
-                            prompt_display = gr.Textbox(
-                                label="Generation Prompt",
-                                lines=3,
-                                interactive=True,
-                                value=""
-                            )
-                            
-                            # Generation controls
-                            generate_btn = gr.Button("Generate Variants")
-                            generate_all_btn = gr.Button("Generate Variants for All Objects")
-                            generation_status = gr.Textbox(
-                                label="Generation Status",
-                                lines=2,
-                                interactive=False
-                            )
+                    with gr.Column(elem_classes="variant-tab"):
+                        # 1. Object Selection & Generation (Top)
+                        with gr.Group(elem_classes="section-container"):
+                            gr.Markdown("### 1. Select Object & Generate Variants")
+                            with gr.Row():
+                                # Left side - Object selection and generation controls
+                                with gr.Column(scale=2, elem_classes="control-panel"):
+                                    object_dropdown = gr.Dropdown(
+                                        label="Select Object",
+                                        choices=[],
+                                        interactive=True,
+                                        elem_classes="control-element"
+                                    )
+                                    
+                                    with gr.Row(elem_classes="control-row"):
+                                        num_variants = gr.Slider(
+                                            label="Number of Variants",
+                                            minimum=1,
+                                            maximum=5,
+                                            value=3,
+                                            step=1,
+                                            interactive=True,
+                                            elem_classes="control-element"
+                                        )
+                                        generate_btn = gr.Button(
+                                            "Generate Variants",
+                                            variant="primary",
+                                            elem_classes="control-element"
+                                        )
+                                    
+                                    with gr.Row(elem_classes="control-row"):
+                                        generate_all_btn = gr.Button(
+                                            "Generate Variants for All Objects",
+                                            elem_classes="control-element"
+                                        )
+                                    
+                                    with gr.Accordion("Edit Generation Prompt", open=False, elem_classes="control-element"):
+                                        prompt_display = gr.Textbox(
+                                            label="Generation Prompt",
+                                            lines=3,
+                                            interactive=True,
+                                            value="",
+                                            elem_classes="control-element"
+                                        )
+                                    
+                                    with gr.Accordion("Advanced Settings", open=False, elem_classes="control-element"):
+                                        seed = gr.Number(
+                                            label="Random Seed",
+                                            value=DEFAULT_SEED,
+                                            interactive=True,
+                                            elem_classes="control-element"
+                                        )
+                                    
+                                    generation_status = gr.Textbox(
+                                        label="Status",
+                                        lines=1,
+                                        interactive=False,
+                                        elem_classes="control-element"
+                                    )
 
-                        # Right Column - Variant Selection
-                        with gr.Column(scale=2):
-                            gr.Markdown("### Variant Selection")
-                            
-                            # Object selection
-                            object_dropdown = gr.Dropdown(
-                                label="Select Object",
-                                choices=[],
-                                interactive=True
+                        # 2. Variant Selection (Middle)
+                        with gr.Group(elem_classes="section-container"):
+                            gr.Markdown("### 2. Select Variants")
+                            variant_gallery = gr.Gallery(
+                                label="Generated Variants",
+                                show_label=False,
+                                elem_id="variant_gallery",
+                                columns=3,
+                                rows=1,
+                                height="auto",
+                                allow_preview=True,
+                                show_download_button=False,
+                                object_fit="contain",
+                                value=[],
+                                elem_classes="gallery-container"
                             )
                             
-                            # Variant gallery
-                            with gr.Column():
-                                gr.Markdown("### Object Variants")
-                                variant_gallery = gr.Gallery(
-                                    label="Generated Variants",
-                                    show_label=True,
-                                    elem_id="variant_gallery",
-                                    columns=3,
-                                    rows=1,
-                                    height="auto",
-                                    allow_preview=True,
-                                    show_download_button=False,
-                                    object_fit="contain",
-                                    value=[]  # Initialize with empty list
+                            # Add select variant button with spacing
+                            with gr.Row(elem_classes="button-row"):
+                                select_variant_btn = gr.Button(
+                                    "Select This Variant",
+                                    interactive=False,
+                                    elem_classes="control-element"
                                 )
                             
-                            # Selection controls
-                            select_variant_btn = gr.Button("Select This Variant")
-                            
-                            # Selected Variants Display
-                            with gr.Column():
-                                gr.Markdown("### Selected Variants")
-                                selected_variants_display = gr.HTML(
-                                    value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
-                                          "<p style='margin: 0; color: #6c757d;'>No variants selected yet</p>"
-                                          "</div>"
-                                )
+                            # Selected variants strip
+                            with gr.Group(elem_classes="section-container"):
+                                gr.Markdown("#### Selected Variants")
                                 selected_variants_gallery = gr.Gallery(
                                     label="Selected Variants",
                                     show_label=False,
-                                    columns=3,
+                                    columns=5,
                                     rows=1,
                                     height="auto",
                                     allow_preview=True,
                                     show_download_button=False,
                                     object_fit="contain",
-                                    value=[]
+                                    value=[],
+                                    elem_classes="gallery-container"
+                                )
+
+                        # 3. 3D Generation (Bottom)
+                        with gr.Group(elem_classes="section-container"):
+                            gr.Markdown("### 3. Generate 3D Models")
+                            with gr.Row(elem_classes="button-row"):
+                                generate_3d_btn = gr.Button(
+                                    "Generate 3D Model",
+                                    interactive=False,
+                                    elem_classes="control-element"
+                                )
+                                generate_all_3d_btn = gr.Button(
+                                    "Generate 3D Models for All Selected Variants",
+                                    interactive=False,
+                                    elem_classes="control-element"
                                 )
                             
-                            # 3D Generation Controls
-                            with gr.Row():
-                                generate_3d_btn = gr.Button("Generate 3D Model", interactive=False)
-                                generate_all_3d_btn = gr.Button("Generate 3D Models for All Selected Variants", interactive=False)
-                            
                             # 3D Preview
-                            gr.Markdown("### 3D Model Preview")
+                            model_output, download_btn = create_glb_preview()
                             model_status = gr.Textbox(
                                 label="Generation Status",
                                 lines=2,
-                                interactive=False
+                                interactive=False,
+                                elem_classes="control-element"
                             )
+
+                    # Add custom CSS for better spacing
+                    gr.HTML("""
+                        <style>
+                            .variant-tab {
+                                padding: 20px;
+                            }
+                            .section-container {
+                                margin-bottom: 30px;
+                                padding: 20px;
+                                border-radius: 8px;
+                                background-color: #f8f9fa;
+                            }
+                            .control-panel {
+                                padding: 15px;
+                            }
+                            .control-element {
+                                margin-bottom: 15px;
+                            }
+                            .control-row {
+                                margin-bottom: 20px;
+                            }
+                            .button-row {
+                                margin: 20px 0;
+                                justify-content: center;
+                            }
+                            .gallery-container {
+                                margin: 20px 0;
+                                padding: 15px;
+                                background-color: white;
+                                border-radius: 8px;
+                            }
+                        </style>
+                    """)
 
                     # State components
                     current_object_state = gr.State(None)
                     current_variants_state = gr.State([])
                     selected_variants_state = gr.State({})
                     current_variant_image = gr.State(None)
-                    selected_variant_index = gr.State(None)  # Add state for selected index
-                    all_variants_state = gr.State({})  # Add state to store all variants
+                    selected_variant_index = gr.State(None)
+                    all_variants_state = gr.State({})
 
                     def update_object_list():
                         """Update the object dropdown with objects from the prompts file."""
@@ -481,6 +540,42 @@ class SceneGeneratorInterface:
                         except Exception as e:
                             return f"Error during batch generation: {str(e)}", None, [], {}
 
+                    def filter_variants_by_object(selected_object, all_variants):
+                        """Filter variants to show only those for the selected object."""
+                        logger.info(f"Filtering variants for object: {selected_object}")
+                        if not selected_object or not all_variants:
+                            return []
+                        
+                        # Get the variants for the selected object
+                        if selected_object in all_variants:
+                            variants = [
+                                (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
+                                for i, v in enumerate(all_variants[selected_object])
+                            ]
+                            logger.info(f"Found {len(variants)} variants for {selected_object}")
+                            return variants
+                        logger.warning(f"No variants found for {selected_object}")
+                        return []
+
+                    def update_prompt_display(selected_object):
+                        """Update the prompt display when an object is selected."""
+                        try:
+                            if not selected_object or not os.path.exists(PROMPTS_FILE):
+                                return ""
+                            
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
+                            
+                            for scene in data['scenes']:
+                                for obj in scene['objects']:
+                                    if obj['name'] == selected_object:
+                                        return obj['prompt']
+                            
+                            return ""
+                        except Exception as e:
+                            logger.error(f"Error updating prompt display: {e}")
+                            return ""
+
                     def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
                         """Generate variants for a single object."""
                         try:
@@ -559,7 +654,7 @@ class SceneGeneratorInterface:
                             logger.info(f"Selected variant: {selected_variant['image_path']}")
                             logger.info(f"Selected index: {evt.index}")
                             return (
-                                gr.Button(interactive=True),  # generate_3d_btn
+                                gr.Button(interactive=True),  # select_variant_btn
                                 selected_variant['image_path'],  # current_variant_image
                                 evt.index  # selected_variant_index
                             )
@@ -585,32 +680,13 @@ class SceneGeneratorInterface:
                             selected_variants = {}
                         selected_variants[object_name] = selected_variant
                         
-                        # Format the selected variants display
-                        html = "<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
-                        if selected_variants:
-                            html += "<ul style='margin: 0; padding-left: 20px;'>"
-                            for obj_name, variant in selected_variants.items():
-                                html += f"""
-                                    <li style='margin: 10px 0; color: #212529;'>
-                                        <div style='display: flex; align-items: center; gap: 10px;'>
-                                            <strong>{obj_name}</strong>
-                                            <br>
-                                            <small style='color: #6c757d;'>Seed: {variant['seed']}</small>
-                                        </div>
-                                    </li>
-                                """
-                            html += "</ul>"
-                        else:
-                            html += "<p style='margin: 0; color: #6c757d;'>No variants selected yet</p>"
-                        html += "</div>"
-                        
                         # Create gallery items for selected variants
                         gallery_items = [
                             (variant['image_path'], f"{obj_name} (Seed: {variant['seed']})")
                             for obj_name, variant in selected_variants.items()
                         ]
                         
-                        return gr.update(value=html), gallery_items
+                        return gr.update(value=f"Selected variant for {object_name}"), gallery_items
 
                     def generate_3d_model(variant_image, object_name):
                         """Generate a 3D model from the selected variant."""
@@ -648,91 +724,6 @@ class SceneGeneratorInterface:
                             error_msg = f"Error generating 3D model: {str(e)}"
                             glb_path, _ = clear_preview()
                             return error_msg, glb_path, None
-
-                    # Add GLB preview components
-                    model_output, download_btn = create_glb_preview()
-
-                    # Connect the generate_3d_model function to the preview
-                    generate_3d_btn.click(
-                        generate_3d_model,
-                        inputs=[current_variant_image, current_object_state],
-                        outputs=[model_status, model_output, download_btn]
-                    )
-
-                    # Clear preview when clearing chat
-                    clear_btn.click(
-                        lambda: clear_preview(),
-                        outputs=[model_output, download_btn]
-                    )
-
-                    def filter_variants_by_object(selected_object, all_variants):
-                        """Filter variants to show only those for the selected object."""
-                        logger.info(f"Filtering variants for object: {selected_object}")
-                        if not selected_object or not all_variants:
-                            return []
-                        
-                        # Get the variants for the selected object
-                        if selected_object in all_variants:
-                            variants = [
-                                (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
-                                for i, v in enumerate(all_variants[selected_object])
-                            ]
-                            logger.info(f"Found {len(variants)} variants for {selected_object}")
-                            return variants
-                        logger.warning(f"No variants found for {selected_object}")
-                        return []
-
-                    def generate_3d_for_all_selected(selected_variants):
-                        """Generate 3D models for all selected variants."""
-                        if not selected_variants:
-                            return "No variants selected", None, None
-                        
-                        try:
-                            results = []
-                            for object_name, variant in selected_variants.items():
-                                # Create output directory for this object
-                                output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
-                                os.makedirs(output_dir, exist_ok=True)
-                                
-                                # Generate 3D model
-                                success, message, outputs = self.generator.generate_3d_from_image(
-                                    image_path=variant['image_path'],
-                                    output_dir=output_dir
-                                )
-                                
-                                if success:
-                                    results.append(f"Successfully generated 3D model for {object_name}")
-                                else:
-                                    results.append(f"Failed to generate 3D model for {object_name}: {message}")
-                            
-                            # Update the GLB preview with the last generated model
-                            if success:
-                                glb_path, _ = update_preview(outputs['glb_path'])
-                                return "\n".join(results), glb_path, outputs['glb_path']
-                            else:
-                                return "\n".join(results), None, None
-                            
-                        except Exception as e:
-                            return f"Error during batch 3D generation: {str(e)}", None, None
-
-                    def update_prompt_display(selected_object):
-                        """Update the prompt display when an object is selected."""
-                        try:
-                            if not selected_object or not os.path.exists(PROMPTS_FILE):
-                                return ""
-                            
-                            with open(PROMPTS_FILE, 'r') as f:
-                                data = json.load(f)
-                            
-                            for scene in data['scenes']:
-                                for obj in scene['objects']:
-                                    if obj['name'] == selected_object:
-                                        return obj['prompt']
-                            
-                            return ""
-                        except Exception as e:
-                            logger.error(f"Error updating prompt display: {e}")
-                            return ""
 
                 # Set up event handlers for variant generation
                 generate_btn.click(
@@ -773,13 +764,17 @@ class SceneGeneratorInterface:
                     fn=lambda x: x,  # Pass through the selected object
                     inputs=[object_dropdown],
                     outputs=[current_object_state]
+                ).then(
+                    fn=update_prompt_display,
+                    inputs=[object_dropdown],
+                    outputs=[prompt_display]
                 )
 
-                # Enable 3D generation button when a variant is selected
+                # Enable select variant button when a variant is selected
                 variant_gallery.select(
                     fn=on_variant_select,
                     inputs=[current_object_state, all_variants_state],
-                    outputs=[generate_3d_btn, current_variant_image, selected_variant_index]
+                    outputs=[select_variant_btn, current_variant_image, selected_variant_index]
                 )
 
                 # Handle variant selection
@@ -792,7 +787,7 @@ class SceneGeneratorInterface:
                         selected_variant_index,
                         all_variants_state
                     ],
-                    outputs=[selected_variants_display, selected_variants_gallery]
+                    outputs=[generation_status, selected_variants_gallery]
                 ).then(
                     fn=lambda: gr.Button(interactive=True),
                     outputs=[generate_all_3d_btn]
@@ -800,8 +795,8 @@ class SceneGeneratorInterface:
 
                 # Add handler for generate all 3D models button
                 generate_all_3d_btn.click(
-                    fn=generate_3d_for_all_selected,
-                    inputs=[selected_variants_state],
+                    fn=generate_3d_model,
+                    inputs=[current_variant_image, current_object_state],
                     outputs=[model_status, model_output, download_btn]
                 )
 
@@ -848,13 +843,6 @@ class SceneGeneratorInterface:
                     on_generate_prompts,
                     [chatbot, accepted_objects_state],
                     [prompts_output, generation_prompt_display, object_dropdown, generation_status]
-                )
-
-                # Add handler for object dropdown to update prompt display
-                object_dropdown.change(
-                    fn=update_prompt_display,
-                    inputs=[object_dropdown],
-                    outputs=[prompt_display]
                 )
 
         return demo
