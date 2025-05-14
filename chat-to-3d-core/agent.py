@@ -108,7 +108,7 @@ class ScenePlanningAgent:
         """Get rules for 3D prompt generation phase."""
         return [
             Rule(
-                "You are now in 3D prompt generation mode. Your task is to create detailed prompts for each object in the scene."
+                "You are now in 3D prompt generation mode. Your task is to create detailed prompts for each object in the scene, suitable for generating 2D images that will later be used for 3D model creation."
             ),
             Rule(
                 "Each prompt MUST start with the object type followed by a comma, then describe its characteristics."
@@ -116,7 +116,13 @@ class ScenePlanningAgent:
                 "\nExample: 'Beach Umbrella, colorful striped canopy...'"
             ),
             Rule(
-                "Focus ONLY on the physical and visual characteristics of each object."
+                "The descriptions should be highly detailed and visually rich, suitable for a text-to-image generation model."
+            ),
+            Rule(
+                "The prompt must specify a plain or empty background (e.g., 'on a white background', 'isolated', 'no background'), ensuring only the object is depicted."
+            ),
+            Rule(
+                "Focus ONLY on the physical and visual characteristics of each object itself."
             ),
             Rule(
                 "For each object, describe:"
@@ -127,9 +133,9 @@ class ScenePlanningAgent:
             ),
             Rule(
                 "DO NOT include any information about:"
-                "\n- Location or placement"
+                "\n- Location or placement in a larger scene (other than specifying an empty background)"
                 "\n- Surrounding objects"
-                "\n- Scene context"
+                "\n- Scene context (e.g. 'a beach scene')"
                 "\n- Relative positions"
             ),
             Rule(
@@ -139,7 +145,7 @@ class ScenePlanningAgent:
                 "Keep each object's prompt to exactly 30 words or less for optimal generation quality."
             ),
             Rule(
-                "Use descriptive adjectives and specific material terms to enhance the 3D generation."
+                "Use descriptive adjectives and specific material terms to enhance the 2D image generation."
             ),
             Rule(
                 "Generate a separate prompt for each object in the scene."
@@ -148,10 +154,10 @@ class ScenePlanningAgent:
                 "Format each object's prompt with 'Object:' and 'Prompt:' labels."
             ),
             Rule(
-                "Each prompt should be self-contained and describe only the object itself."
+                "Each prompt should be self-contained and describe only the object itself against a plain/empty background."
             ),
             Rule(
-                "Focus on details that will help create an accurate 3D model of the object."
+                "Focus on details that will help create an accurate and clear 2D image of the object."
             ),
             Rule(
                 "The first word of each prompt MUST be the object type, followed by a comma."
@@ -239,12 +245,17 @@ class ScenePlanningAgent:
             self.agent.rules = self._get_prompt_generation_rules()
             self.is_generating_prompts = True
 
-            generation_prompt = f"""Generate detailed 3D prompts for each object in the current scene, focusing on:
-            1. Visual and physical characteristics
-            2. Materials and surface properties
-            Generate prompt for each object strictly from this list: {initial_description}
+            generation_prompt = f"""Generate detailed visual prompts suitable for 2D image generation for each object in the current scene.
+            The prompts will be used to create images that are later converted to 3D models.
+            Focus on:
+            1. Detailed visual and physical characteristics (shape, form, textures, colors, patterns, specific features).
+            2. Ensuring the prompt specifies a plain or empty background (e.g., 'on a white background', 'isolated', 'no background'), so only the object is depicted.
+            
+            Generate a prompt for each object strictly from this list: {initial_description}.
+            Each prompt MUST start with the object type followed by a comma.
             Keep each prompt to exactly 30 words or less.
             Format each object's prompt with 'Object:' and 'Prompt:' labels.
+            Do NOT include any surrounding scene context or other objects in the prompt itself (beyond the plain background specification).
             """
 
             response = self.agent.run(generation_prompt)

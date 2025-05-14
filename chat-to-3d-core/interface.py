@@ -253,69 +253,57 @@ class SceneGeneratorInterface:
                             ), "", gr.update(choices=[], value=None, interactive=False), f"Error: {str(e)}"
 
                 with gr.TabItem("Generate & Select Variants"):
-                    with gr.Column(elem_classes="variant-tab"):
-                        # 1. Object Selection & Generation (Top)
-                        with gr.Group(elem_classes="section-container"):
-                            gr.Markdown("### 1. Select Object & Generate Variants")
-                            with gr.Row():
-                                # Left side - Object selection and generation controls
-                                with gr.Column(scale=2, elem_classes="control-panel"):
-                                    object_dropdown = gr.Dropdown(
-                                        label="Select Object",
-                                        choices=[],
-                                        interactive=True,
-                                        elem_classes="control-element"
-                                    )
-                                    
-                                    with gr.Row(elem_classes="control-row"):
-                                        num_variants = gr.Slider(
-                                            label="Number of Variants",
-                                            minimum=1,
-                                            maximum=5,
-                                            value=3,
-                                            step=1,
-                                            interactive=True,
-                                            elem_classes="control-element"
-                                        )
-                                        generate_btn = gr.Button(
-                                            "Generate Variants",
-                                            variant="primary",
-                                            elem_classes="control-element"
-                                        )
-                                    
-                                    with gr.Row(elem_classes="control-row"):
-                                        generate_all_btn = gr.Button(
-                                            "Generate Variants for All Objects",
-                                            elem_classes="control-element"
-                                        )
-                                    
-                                    with gr.Accordion("Edit Generation Prompt", open=False, elem_classes="control-element"):
-                                        prompt_display = gr.Textbox(
-                                            label="Generation Prompt",
-                                            lines=3,
-                                            interactive=True,
-                                            value="",
-                                            elem_classes="control-element"
-                                        )
-                                    
-                                    with gr.Accordion("Advanced Settings", open=False, elem_classes="control-element"):
-                                        seed = gr.Number(
-                                            label="Random Seed",
-                                            value=DEFAULT_SEED,
-                                            interactive=True,
-                                            elem_classes="control-element"
-                                        )
-                                    
-                                    generation_status = gr.Textbox(
-                                        label="Status",
-                                        lines=1,
-                                        interactive=False,
-                                        elem_classes="control-element"
-                                    )
+                    #with gr.Column(elem_classes="variant-tab"):
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### Object & Prompt Management")
+                            with gr.Column():
+                                object_dropdown = gr.Dropdown(
+                                    label="Select Object",
+                                    choices=[],
+                                    interactive=True,
+                                )
+                                
+                                prompt_display = gr.Textbox(
+                                    label="Generation Prompt",
+                                    lines=3,
+                                    interactive=True,
+                                    value="",
+                                )
+                             
+                                num_variants = gr.Slider(
+                                        label="Number of Variants",
+                                        minimum=1,
+                                        maximum=5,
+                                        value=3,
+                                        step=1,
+                                        interactive=True,                                       
+                                )
 
-                        # 2. Variant Selection (Middle)
-                        with gr.Group(elem_classes="section-container"):
-                            gr.Markdown("### 2. Select Variants")
+                                with gr.Accordion("Advanced Settings", open=False):
+                                    seed = gr.Number(
+                                        label="Random Seed",
+                                        value=DEFAULT_SEED,
+                                        interactive=True,
+                                    )
+                                
+                                generate_btn = gr.Button(
+                                    "Generate Variants", 
+                                )
+                                
+                                generate_all_btn = gr.Button(
+                                    "Generate Variants for All Objects",   
+                                )
+                                
+                                generation_status = gr.Textbox(
+                                    label="Status",
+                                    lines=2,
+                                    interactive=False
+                                )
+
+                                              
+                        with gr.Column(scale=3):
+                            gr.Markdown("### Image Variant Gallery")   
                             variant_gallery = gr.Gallery(
                                 label="Generated Variants",
                                 show_label=False,
@@ -327,98 +315,48 @@ class SceneGeneratorInterface:
                                 show_download_button=False,
                                 object_fit="contain",
                                 value=[],
-                                elem_classes="gallery-container"
                             )
-                            
-                            # Add select variant button with spacing
-                            with gr.Row(elem_classes="button-row"):
+
+                            with gr.Row():
                                 select_variant_btn = gr.Button(
                                     "Select This Variant",
                                     interactive=False,
-                                    elem_classes="control-element"
-                                )
-                            
-                            # Selected variants strip
-                            with gr.Group(elem_classes="section-container"):
-                                gr.Markdown("#### Selected Variants")
-                                selected_variants_gallery = gr.Gallery(
-                                    label="Selected Variants",
-                                    show_label=False,
-                                    columns=5,
-                                    rows=1,
-                                    height="auto",
-                                    allow_preview=True,
-                                    show_download_button=False,
-                                    object_fit="contain",
-                                    value=[],
-                                    elem_classes="gallery-container"
-                                )
+                            )
+                                
 
-                        # 3. 3D Generation (Bottom)
-                        with gr.Group(elem_classes="section-container"):
-                            gr.Markdown("### 3. Generate 3D Models")
-                            with gr.Row(elem_classes="button-row"):
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### Selected Variants Overview")
+                            selected_variants_gallery = gr.Gallery(
+                                label="Selected Variants",
+                                show_label=False,
+                                columns=5,
+                                rows=1,
+                                height="auto",
+                                allow_preview=True,
+                                show_download_button=False,
+                                object_fit="contain",
+                                value=[],
+                            )
+                            with gr.Row():
                                 generate_3d_btn = gr.Button(
-                                    "Generate 3D Model for Selected Object",
-                                    interactive=False,
-                                    elem_classes="control-element"
+                                "Generate 3D Model for Selected Object",
+                                interactive=False,
+                                
                                 )
                                 generate_all_3d_btn = gr.Button(
-                                    "Generate 3D Models for All Selected Variants",
-                                    interactive=False,
-                                    elem_classes="control-element"
-                                )
-                            
-                            # 3D Preview
-                            with gr.Column(elem_classes="preview-container"):
-                                gr.Markdown("#### 3D Model Preview")
-                                model_output, download_btn = create_glb_preview()
-                                model_status = gr.Textbox(
-                                    label="Generation Status",
-                                    lines=2,
-                                    interactive=False,
-                                    elem_classes="control-element"
+                                "Generate 3D Models for All Selected Variants",
+                                interactive=False,
                                 )
 
-                    # Add custom CSS for better spacing
-                    gr.HTML("""
-                        <style>
-                            .variant-tab {
-                                padding: 20px;
-                            }
-                            .section-container {
-                                margin-bottom: 30px;
-                                padding: 20px;
-                                border-radius: 8px;
-                                background-color: #f8f9fa;
-                            }
-                            .control-panel {
-                                padding: 15px;
-                            }
-                            .control-element {
-                                margin-bottom: 15px;
-                            }
-                            .control-row {
-                                margin-bottom: 20px;
-                            }
-                            .button-row {
-                                margin: 20px 0;
-                                justify-content: center;
-                            }
-                            .gallery-container {
-                                margin: 20px 0;
-                                padding: 15px;
-                                background-color: white;
-                                border-radius: 8px;
-                            }
-                            .preview-container {
-                                margin-top: 20px;
-                                padding: 15px;
-                                background-color: white;
-                                border-radius: 8px;
-                            }
-                        </style>
-                    """)
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 3d Model Preview")
+                            model_output, download_btn = create_glb_preview()
+                            model_status = gr.Textbox(
+                                label="Generation Status",
+                                lines=2,
+                                interactive=False,
+                            )
 
                     # State components
                     current_object_state = gr.State(None)
@@ -583,6 +521,14 @@ class SceneGeneratorInterface:
                         except Exception as e:
                             logger.error(f"Error updating prompt display: {e}")
                             return ""
+
+                    def clear_model_preview_on_object_change():
+                        """Clears the 3D model preview and associated status when the object dropdown changes."""
+                        logger.info("Object dropdown changed, clearing 3D model preview.")
+                        cleared_model_output, _ = clear_preview() # We expect the model path to be None
+                        # The download button value should be None when there's no file
+                        logger.info(f"Cleared model output: {cleared_model_output}, Download button value: None")
+                        return cleared_model_output, None, "" # Cleared model, None for download button, Empty status
 
                     def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
                         """Generate variants for a single object."""
@@ -824,6 +770,10 @@ class SceneGeneratorInterface:
                         fn=update_prompt_display,
                         inputs=[object_dropdown],
                         outputs=[prompt_display]
+                    ).then(
+                        fn=clear_model_preview_on_object_change,
+                        inputs=[],
+                        outputs=[model_output, download_btn, model_status]
                     )
 
                     # Enable select variant button when a variant is selected
@@ -914,3 +864,6 @@ class SceneGeneratorInterface:
         """Launch the Gradio interface."""
         demo = self.create_interface()
         demo.launch(**kwargs)
+
+
+
