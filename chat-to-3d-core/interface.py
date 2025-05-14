@@ -69,7 +69,7 @@ class SceneGeneratorInterface:
     def create_interface(self):
         """Create the Gradio interface for the 3D Scene Generator."""
         with gr.Blocks() as demo:
-            gr.Markdown("# 3D Scene Generator POC")
+            gr.Markdown("# 3D Scene Generator")
 
             with gr.Tabs():
                 with gr.TabItem("Chat & Generate Prompts"):

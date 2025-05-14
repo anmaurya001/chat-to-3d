@@ -10,15 +10,17 @@ def create_glb_preview():
         tuple: (model_output, download_button) - The 3D model viewer and download button components
     """
     with gr.Row():
-        model_output = LitModel3D(
-            label="3D Model Preview",
-            exposure=10.0,
-            height=400
-        )
-        download_btn = gr.DownloadButton(
-            label="Download GLB",
-            interactive=False
-        )
+        with gr.Column(scale=4):
+            model_output = LitModel3D(
+                label="3D Model Preview",
+                exposure=10.0,
+                height=400
+            )
+        with gr.Column(scale=1):
+            download_btn = gr.DownloadButton(
+                label="Download GLB",
+                interactive=False
+            )
     
     return model_output, download_btn
 
