@@ -351,12 +351,27 @@ class SceneGeneratorInterface:
 
                         with gr.Column(scale=1):
                             gr.Markdown("### 3d Model Preview")
-                            model_output, download_btn = create_glb_preview()
-                            model_status = gr.Textbox(
-                                label="Generation Status",
-                                lines=2,
-                                interactive=False,
-                            )
+                            # 3D Preview
+                            with gr.Column(elem_classes="preview-container"):
+                                gr.Markdown("#### Main 3D Model Preview") # Renamed for clarity
+                                model_output, download_btn = create_glb_preview()
+                                model_status = gr.Textbox(
+                                    label="Generation Status",
+                                    lines=2,
+                                    interactive=False,
+                                    elem_classes="control-element"
+                                )
+                            
+                            # Step 1.2: Add UI for all generated models
+                            with gr.Column(elem_classes="preview-container", scale=1): # Keep same styling for now
+                                gr.Markdown("#### All Generated 3D Models (Session)")
+                                all_generated_models_display = gr.Dataset(
+                                    components=["text"], # Just display name for now
+                                    headers=["Generated Model"],
+                                    label="Session Models",
+                                    samples=[], # Changed from value=[] to samples=[]
+                                    samples_per_page=5,
+                                )
 
                     # State components
                     current_object_state = gr.State(None)
@@ -365,6 +380,7 @@ class SceneGeneratorInterface:
                     current_variant_image = gr.State(None)
                     selected_variant_index = gr.State(None)
                     all_variants_state = gr.State({})
+                    all_session_models_state = gr.State([]) # Step 1.1: New state for all generated models
 
                     def update_object_list():
                         """Update the object dropdown with objects from the prompts file."""
@@ -539,16 +555,13 @@ class SceneGeneratorInterface:
                             if not os.path.exists(PROMPTS_FILE):
                                 return "Please generate prompts first in the Chat & Generate Prompts tab", None, [], all_variants_state
                             
-                            # Read prompts file
                             with open(PROMPTS_FILE, 'r') as f:
                                 data = json.load(f)
                             
-                            # Find the object's prompt
                             object_prompt = None
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
                                     if obj['name'] == object_name:
-                                        # Use edited prompt if available
                                         object_prompt = prompt_display if prompt_display else obj['prompt']
                                         break
                                 if object_prompt:
@@ -557,11 +570,9 @@ class SceneGeneratorInterface:
                             if not object_prompt:
                                 return f"Object '{object_name}' not found in prompts file", None, [], all_variants_state
                             
-                            # Create output directory for this object
                             object_dir = os.path.join(OUTPUT_DIR, object_name)
                             os.makedirs(object_dir, exist_ok=True)
                             
-                            # Generate variants
                             success, message, variants = self.generator.generate_variants(
                                 prompt=object_prompt,
                                 output_dir=object_dir,
@@ -572,12 +583,10 @@ class SceneGeneratorInterface:
                             if not success:
                                 return f"Error: {message}", None, [], all_variants_state
                             
-                            # Update the variants state with new variants for this object
                             if all_variants_state is None:
                                 all_variants_state = {}
                             all_variants_state[object_name] = variants
                             
-                            # Create gallery items
                             gallery_items = [
                                 (v['image_path'], f"{object_name} - Variant {i+1} (Seed: {v['seed']})")
                                 for i, v in enumerate(variants)
@@ -627,105 +636,193 @@ class SceneGeneratorInterface:
                         if selected_idx >= len(all_variants_state[object_name]):
                             return gr.update(value="Invalid variant selection"), []
                         
-                        # Get the selected variant from all_variants_state
-                        selected_variant = all_variants_state[object_name][selected_idx]
+                        # Get the selected variant from all_variants_state and add its original index
+                        selected_variant_details = dict(all_variants_state[object_name][selected_idx]) # Make a copy
+                        selected_variant_details['variant_idx'] = selected_idx # Store the original index
                         
-                        # Update selected variants
+                        # Update selected variants state
                         if selected_variants is None:
                             selected_variants = {}
-                        selected_variants[object_name] = selected_variant
+                        selected_variants[object_name] = selected_variant_details # Store the augmented dict
                         
-                        # Create gallery items for selected variants
+                        # Create gallery items for selected variants display (shows images)
                         gallery_items = [
-                            (variant['image_path'], f"{obj_name} (Seed: {variant['seed']})")
-                            for obj_name, variant in selected_variants.items()
+                            (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
+                            for obj_name, v in selected_variants.items()
                         ]
                         
                         return gr.update(value=f"Selected variant for {object_name}"), gallery_items
 
-                    def generate_3d_model(object_name, all_variants_state, selected_idx):
+                    def generate_3d_model(object_name, all_variants_state, selected_idx, current_all_session_models):
                         """Generate a 3D model for the selected object using the selected variant."""
                         logger.info(f"Starting 3D model generation for object: {object_name}")
+                        
+                        # Initialize current_all_session_models if it's None
+                        if current_all_session_models is None:
+                            current_all_session_models = []
+
+                        # Prepare placeholder for dataset display in case of early return
+                        dataset_display_data = [[item['display_name']] for item in current_all_session_models]
+
                         if not object_name or not all_variants_state or object_name not in all_variants_state:
                             logger.warning("No object selected or no variants available")
-                            return "Please select an object and generate variants first", None, None
+                            return "Please select an object and generate variants first", None, None, current_all_session_models, dataset_display_data
                         
                         if selected_idx is None:
                             logger.warning("No variant selected")
-                            return "Please select a variant first", None, None
+                            return "Please select a variant first", None, None, current_all_session_models, dataset_display_data
                         
                         try:
-                            # Get the selected variant for the object
                             variants = all_variants_state[object_name]
                             if not variants or selected_idx >= len(variants):
-                                return "Invalid variant selection", None, None
+                                return "Invalid variant selection", None, None, current_all_session_models, dataset_display_data
                             
-                            variant = variants[selected_idx]  # Use the selected variant
-                            
-                            # Create output directory for this object
+                            variant = variants[selected_idx]
                             output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
-                            logger.info(f"Creating output directory: {output_dir}")
                             os.makedirs(output_dir, exist_ok=True)
                             
-                            # Generate 3D model
-                            logger.info("Calling TRELLIS model for 3D generation")
+                            logger.info(f"Calling TRELLIS model for 3D generation for {object_name} using variant {selected_idx}")
                             success, message, outputs = self.generator.generate_3d_from_image(
                                 image_path=variant['image_path'],
                                 output_dir=output_dir
                             )
                             
                             if not success:
-                                logger.error(f"3D generation failed: {message}")
-                                return message, None, None
+                                logger.error(f"3D generation failed for {object_name}: {message}")
+                                return message, None, None, current_all_session_models, dataset_display_data
                             
-                            logger.info("3D model generation completed successfully")
-                            logger.info(f"Output GLB path: {outputs['glb_path']}")
+                            logger.info(f"3D model for {object_name} generated successfully. GLB path: {outputs['glb_path']}")
+                            glb_path_for_preview, _ = update_preview(outputs['glb_path'])
                             
-                            # Update the GLB preview
-                            glb_path, _ = update_preview(outputs['glb_path'])
-                            return f"Successfully generated 3D model for {object_name} (Variant {selected_idx + 1})", glb_path, outputs['glb_path']
+                            # Create display name and new entry for the session models state
+                            variant_seed = variant.get('seed', 'N/A') # Get seed if available
+                            display_name = f"{object_name} - Var {selected_idx + 1} (Seed: {variant_seed})"
+                            new_model_entry = {'display_name': display_name, 'glb_path': outputs['glb_path']}
+
+                            # Update session models state: Upsert based on glb_path
+                            updated_all_session_models = list(current_all_session_models) # Make a copy
+                            found_existing = False
+                            for i, existing_model in enumerate(updated_all_session_models):
+                                if existing_model['glb_path'] == new_model_entry['glb_path']:
+                                    updated_all_session_models[i] = new_model_entry # Update existing entry
+                                    logger.info(f"Updated model in session: {display_name}")
+                                    found_existing = True
+                                    break
+                            if not found_existing:
+                                updated_all_session_models.append(new_model_entry)
+                                logger.info(f"Added new model to session: {display_name}")
+
+                            # Prepare data for the gr.Dataset component
+                            final_dataset_display_data = [[item['display_name']] for item in updated_all_session_models]
+                            
+                            return (
+                                f"Successfully generated 3D: {display_name}", 
+                                glb_path_for_preview, 
+                                outputs['glb_path'],  # For download button
+                                updated_all_session_models, # The updated state itself
+                                gr.update(samples=final_dataset_display_data) # Updated for Dataset
+                            )
                             
                         except Exception as e:
-                            logger.error(f"Error generating 3D model: {str(e)}", exc_info=True)
+                            logger.error(f"Error in generate_3d_model for {object_name}: {str(e)}", exc_info=True)
                             error_msg = f"Error generating 3D model: {str(e)}"
-                            glb_path, _ = clear_preview()
-                            return error_msg, glb_path, None
+                            cleared_glb_path, _ = clear_preview()
+                            # Return current (unmodified by this error) session models and its display data
+                            current_dataset_display_data = [[item['display_name']] for item in current_all_session_models]
+                            return error_msg, cleared_glb_path, None, current_all_session_models, gr.update(samples=current_dataset_display_data) # Updated for Dataset
 
-                    def generate_3d_for_all_selected(selected_variants):
+                    def generate_3d_for_all_selected(selected_variants, current_all_session_models):
                         """Generate 3D models for all selected variants."""
                         if not selected_variants:
-                            return "No variants selected", None, None
+                            # Ensure all_session_models_display is updated with its current state
+                            dataset_display_data = [[item['display_name']] for item in current_all_session_models] if current_all_session_models else []
+                            return "No variants selected", None, None, current_all_session_models, dataset_display_data
+                        
+                        if current_all_session_models is None:
+                            current_all_session_models = [] # Initialize if None
+
+                        updated_all_session_models = list(current_all_session_models) # Make a copy to modify throughout the loop
+                        results_log = []
+                        last_successful_glb_path_for_preview = None
+                        last_successful_glb_path_for_download = None
                         
                         try:
-                            results = []
-                            last_successful_output = None
-                            
-                            for object_name, variant in selected_variants.items():
-                                # Create output directory for this object
+                            for object_name, variant_details in selected_variants.items():
+                                logger.info(f"Batch generating 3D for {object_name} from variant: {variant_details.get('image_path')}")
                                 output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
                                 os.makedirs(output_dir, exist_ok=True)
                                 
-                                # Generate 3D model
                                 success, message, outputs = self.generator.generate_3d_from_image(
-                                    image_path=variant['image_path'],
+                                    image_path=variant_details['image_path'],
                                     output_dir=output_dir
                                 )
                                 
                                 if success:
-                                    results.append(f"Successfully generated 3D model for {object_name}")
-                                    last_successful_output = outputs
+                                    results_log.append(f"Successfully generated 3D for {object_name}")
+                                    last_successful_glb_path_for_download = outputs['glb_path']
+                                    last_successful_glb_path_for_preview, _ = update_preview(outputs['glb_path'])
+                                    
+                                    variant_seed = variant_details.get('seed', 'N/A')
+                                    original_variant_idx = variant_details.get('variant_idx', -1) # Get the stored index
+                                    
+                                    var_num_str = f"{original_variant_idx + 1}" if original_variant_idx != -1 else "Unknown"
+                                    display_name = f"{object_name} - Var {var_num_str} (Seed: {variant_seed})"
+                                                                        
+                                    new_model_entry = {'display_name': display_name, 'glb_path': outputs['glb_path']}
+
+                                    # Upsert logic for this new model entry
+                                    found_existing = False
+                                    for i, existing_model in enumerate(updated_all_session_models):
+                                        if existing_model['glb_path'] == new_model_entry['glb_path']:
+                                            updated_all_session_models[i] = new_model_entry
+                                            logger.info(f"Updated model in session (batch): {display_name}")
+                                            found_existing = True
+                                            break
+                                    if not found_existing:
+                                        updated_all_session_models.append(new_model_entry)
+                                        logger.info(f"Added new model to session (batch): {display_name}")
                                 else:
-                                    results.append(f"Failed to generate 3D model for {object_name}: {message}")
+                                    results_log.append(f"Failed for {object_name}: {message}")
+                                    logger.error(f"Batch 3D generation failed for {object_name}: {message}")
                             
-                            # Update the GLB preview with the last successful model
-                            if last_successful_output:
-                                glb_path, _ = update_preview(last_successful_output['glb_path'])
-                                return "\n".join(results), glb_path, last_successful_output['glb_path']
-                            else:
-                                return "\n".join(results), None, None
+                            final_status_message = "\n".join(results_log) if results_log else "No models processed."
+                            final_dataset_display_data = [[item['display_name']] for item in updated_all_session_models]
+
+                            return (
+                                final_status_message,
+                                last_successful_glb_path_for_preview, 
+                                last_successful_glb_path_for_download, 
+                                updated_all_session_models,
+                                gr.update(samples=final_dataset_display_data)
+                            )
                             
                         except Exception as e:
-                            return f"Error during batch 3D generation: {str(e)}", None, None
+                            logger.error(f"Error during batch 3D generation: {str(e)}", exc_info=True)
+                            error_msg = f"Error during batch 3D generation: {str(e)}"
+                            current_dataset_display_data = [[item['display_name']] for item in updated_all_session_models] # Use potentially partially updated list
+                            return error_msg, None, None, updated_all_session_models, gr.update(samples=current_dataset_display_data)
+
+                    def on_session_model_select(evt: gr.SelectData, current_all_session_models):
+                        """Handles selection of a model from the all_generated_models_display Dataset."""
+                        if evt.index is None or not current_all_session_models or evt.index >= len(current_all_session_models):
+                            logger.warning("Invalid selection from session models display or no models available.")
+                            # Optionally clear preview or return current values if no valid selection
+                            cleared_model_output, _ = clear_preview()
+                            return cleared_model_output, None, "Invalid selection or no model data."
+
+                        selected_model_data = current_all_session_models[evt.index]
+                        glb_path = selected_model_data.get('glb_path')
+                        display_name = selected_model_data.get('display_name', 'Selected Model')
+
+                        if not glb_path or not os.path.exists(glb_path):
+                            logger.error(f"GLB path not found or invalid for selected session model: {glb_path}")
+                            cleared_model_output, _ = clear_preview()
+                            return cleared_model_output, None, f"Error: GLB file not found for {display_name}."
+                        
+                        logger.info(f"Loading model from session display: {display_name} (Path: {glb_path})")
+                        model_output_val, _ = update_preview(glb_path)
+                        # The download_btn value should be the glb_path itself
+                        return model_output_val, glb_path, f"Displaying: {display_name}"
 
                     # Set up event handlers for variant generation
                     generate_btn.click(
@@ -802,15 +899,22 @@ class SceneGeneratorInterface:
                     # Add handler for generate all 3D models button
                     generate_all_3d_btn.click(
                         fn=generate_3d_for_all_selected,
-                        inputs=[selected_variants_state],
-                        outputs=[model_status, model_output, download_btn]
+                        inputs=[selected_variants_state, all_session_models_state],
+                        outputs=[model_status, model_output, download_btn, all_session_models_state, all_generated_models_display]
                     )
 
                     # Connect the generate_3d_model function to the preview
                     generate_3d_btn.click(
                         generate_3d_model,
-                        inputs=[current_object_state, all_variants_state, selected_variant_index],
-                        outputs=[model_status, model_output, download_btn]
+                        inputs=[current_object_state, all_variants_state, selected_variant_index, all_session_models_state],
+                        outputs=[model_status, model_output, download_btn, all_session_models_state, all_generated_models_display]
+                    )
+                    
+                    # Step 3.2: Add event handler for session model selection
+                    all_generated_models_display.select(
+                        fn=on_session_model_select,
+                        inputs=[all_session_models_state], # evt: gr.SelectData is implicitly the first arg to fn
+                        outputs=[model_output, download_btn, model_status]
                     )
 
                 # Update object list when the tab is selected
