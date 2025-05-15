@@ -266,7 +266,7 @@ class SceneGeneratorInterface:
                                 
                                 prompt_display = gr.Textbox(
                                     label="Generation Prompt",
-                                    lines=3,
+                                    lines=4,
                                     interactive=True,
                                     value="",
                                 )
@@ -338,40 +338,41 @@ class SceneGeneratorInterface:
                                 object_fit="contain",
                                 value=[],
                             )
-                            with gr.Row():
-                                generate_3d_btn = gr.Button(
+                            # with gr.Row():
+                            generate_3d_btn = gr.Button(
                                 "Generate 3D Model for Selected Object",
                                 interactive=False,
-                                
-                                )
-                                generate_all_3d_btn = gr.Button(
-                                "Generate 3D Models for All Selected Variants",
-                                interactive=False,
-                                )
+                            )
+                            generate_all_3d_btn = gr.Button(
+                            "Generate 3D Models for All Selected Variants",
+                            interactive=False,
+                            )
 
-                        with gr.Column(scale=1):
+                        with gr.Column(scale=3):
                             gr.Markdown("### 3d Model Preview")
-                            # 3D Preview
-                            with gr.Column(elem_classes="preview-container"):
-                                gr.Markdown("#### Main 3D Model Preview") # Renamed for clarity
-                                model_output, download_btn = create_glb_preview()
-                                model_status = gr.Textbox(
-                                    label="Generation Status",
-                                    lines=2,
-                                    interactive=False,
-                                    elem_classes="control-element"
-                                )
-                            
-                            # Step 1.2: Add UI for all generated models
-                            with gr.Column(elem_classes="preview-container", scale=1): # Keep same styling for now
-                                gr.Markdown("#### All Generated 3D Models (Session)")
-                                all_generated_models_display = gr.Dataset(
-                                    components=["text"], # Just display name for now
-                                    headers=["Generated Model"],
-                                    label="Session Models",
-                                    samples=[], # Changed from value=[] to samples=[]
-                                    samples_per_page=5,
-                                )
+
+                            with gr.Row():
+                                # 3D Preview
+                                with gr.Column(elem_classes="preview-container", scale=3):
+                                    gr.Markdown("#### Main 3D Model Preview") # Renamed for clarity
+                                    model_output = create_glb_preview()
+                                    model_status = gr.Textbox(
+                                        label="Generation Status",
+                                        lines=2,
+                                        interactive=False,
+                                        elem_classes="control-element"
+                                    )
+                                
+                                # Step 1.2: Add UI for all generated models
+                                with gr.Column(elem_classes="preview-container", scale=1): # Keep same styling for now
+                                    gr.Markdown("#### All Generated 3D Models (Session)")
+                                    all_generated_models_display = gr.Dataset(
+                                        components=["text"], # Just display name for now
+                                        headers=["Generated Model"],
+                                        label="Session Models",
+                                        samples=[], # Changed from value=[] to samples=[]
+                                        samples_per_page=5,
+                                    )
 
                     # State components
                     current_object_state = gr.State(None)
@@ -541,10 +542,10 @@ class SceneGeneratorInterface:
                     def clear_model_preview_on_object_change():
                         """Clears the 3D model preview and associated status when the object dropdown changes."""
                         logger.info("Object dropdown changed, clearing 3D model preview.")
-                        cleared_model_output, _ = clear_preview() # We expect the model path to be None
+                        cleared_model_output = clear_preview() # We expect the model path to be None
                         # The download button value should be None when there's no file
                         logger.info(f"Cleared model output: {cleared_model_output}, Download button value: None")
-                        return cleared_model_output, None, "" # Cleared model, None for download button, Empty status
+                        return cleared_model_output, "" # Cleared model, Empty status
 
                     def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
                         """Generate variants for a single object."""
@@ -666,16 +667,16 @@ class SceneGeneratorInterface:
 
                         if not object_name or not all_variants_state or object_name not in all_variants_state:
                             logger.warning("No object selected or no variants available")
-                            return "Please select an object and generate variants first", None, None, current_all_session_models, dataset_display_data
+                            return "Please select an object and generate variants first", None, current_all_session_models, dataset_display_data
                         
                         if selected_idx is None:
                             logger.warning("No variant selected")
-                            return "Please select a variant first", None, None, current_all_session_models, dataset_display_data
+                            return "Please select a variant first", None, current_all_session_models, dataset_display_data
                         
                         try:
                             variants = all_variants_state[object_name]
                             if not variants or selected_idx >= len(variants):
-                                return "Invalid variant selection", None, None, current_all_session_models, dataset_display_data
+                                return "Invalid variant selection", None, current_all_session_models, dataset_display_data
                             
                             variant = variants[selected_idx]
                             output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
@@ -689,10 +690,10 @@ class SceneGeneratorInterface:
                             
                             if not success:
                                 logger.error(f"3D generation failed for {object_name}: {message}")
-                                return message, None, None, current_all_session_models, dataset_display_data
+                                return message, None, current_all_session_models, dataset_display_data
                             
                             logger.info(f"3D model for {object_name} generated successfully. GLB path: {outputs['glb_path']}")
-                            glb_path_for_preview, _ = update_preview(outputs['glb_path'])
+                            glb_path_for_preview = update_preview(outputs['glb_path'])
                             
                             # Create display name and new entry for the session models state
                             variant_seed = variant.get('seed', 'N/A') # Get seed if available
@@ -718,7 +719,6 @@ class SceneGeneratorInterface:
                             return (
                                 f"Successfully generated 3D: {display_name}", 
                                 glb_path_for_preview, 
-                                outputs['glb_path'],  # For download button
                                 updated_all_session_models, # The updated state itself
                                 gr.update(samples=final_dataset_display_data) # Updated for Dataset
                             )
@@ -726,17 +726,17 @@ class SceneGeneratorInterface:
                         except Exception as e:
                             logger.error(f"Error in generate_3d_model for {object_name}: {str(e)}", exc_info=True)
                             error_msg = f"Error generating 3D model: {str(e)}"
-                            cleared_glb_path, _ = clear_preview()
+                            cleared_glb_path = clear_preview()
                             # Return current (unmodified by this error) session models and its display data
                             current_dataset_display_data = [[item['display_name']] for item in current_all_session_models]
-                            return error_msg, cleared_glb_path, None, current_all_session_models, gr.update(samples=current_dataset_display_data) # Updated for Dataset
+                            return error_msg, cleared_glb_path, current_all_session_models, gr.update(samples=current_dataset_display_data) # Updated for Dataset
 
                     def generate_3d_for_all_selected(selected_variants, current_all_session_models):
                         """Generate 3D models for all selected variants."""
                         if not selected_variants:
                             # Ensure all_session_models_display is updated with its current state
                             dataset_display_data = [[item['display_name']] for item in current_all_session_models] if current_all_session_models else []
-                            return "No variants selected", None, None, current_all_session_models, dataset_display_data
+                            return "No variants selected", None, current_all_session_models, dataset_display_data
                         
                         if current_all_session_models is None:
                             current_all_session_models = [] # Initialize if None
@@ -744,7 +744,6 @@ class SceneGeneratorInterface:
                         updated_all_session_models = list(current_all_session_models) # Make a copy to modify throughout the loop
                         results_log = []
                         last_successful_glb_path_for_preview = None
-                        last_successful_glb_path_for_download = None
                         
                         try:
                             for object_name, variant_details in selected_variants.items():
@@ -759,8 +758,7 @@ class SceneGeneratorInterface:
                                 
                                 if success:
                                     results_log.append(f"Successfully generated 3D for {object_name}")
-                                    last_successful_glb_path_for_download = outputs['glb_path']
-                                    last_successful_glb_path_for_preview, _ = update_preview(outputs['glb_path'])
+                                    last_successful_glb_path_for_preview = update_preview(outputs['glb_path'])
                                     
                                     variant_seed = variant_details.get('seed', 'N/A')
                                     original_variant_idx = variant_details.get('variant_idx', -1) # Get the stored index
@@ -791,7 +789,6 @@ class SceneGeneratorInterface:
                             return (
                                 final_status_message,
                                 last_successful_glb_path_for_preview, 
-                                last_successful_glb_path_for_download, 
                                 updated_all_session_models,
                                 gr.update(samples=final_dataset_display_data)
                             )
@@ -800,15 +797,15 @@ class SceneGeneratorInterface:
                             logger.error(f"Error during batch 3D generation: {str(e)}", exc_info=True)
                             error_msg = f"Error during batch 3D generation: {str(e)}"
                             current_dataset_display_data = [[item['display_name']] for item in updated_all_session_models] # Use potentially partially updated list
-                            return error_msg, None, None, updated_all_session_models, gr.update(samples=current_dataset_display_data)
+                            return error_msg, None, updated_all_session_models, gr.update(samples=current_dataset_display_data)
 
                     def on_session_model_select(evt: gr.SelectData, current_all_session_models):
                         """Handles selection of a model from the all_generated_models_display Dataset."""
                         if evt.index is None or not current_all_session_models or evt.index >= len(current_all_session_models):
                             logger.warning("Invalid selection from session models display or no models available.")
                             # Optionally clear preview or return current values if no valid selection
-                            cleared_model_output, _ = clear_preview()
-                            return cleared_model_output, None, "Invalid selection or no model data."
+                            cleared_model_output = clear_preview()
+                            return cleared_model_output, "Invalid selection or no model data."
 
                         selected_model_data = current_all_session_models[evt.index]
                         glb_path = selected_model_data.get('glb_path')
@@ -816,13 +813,12 @@ class SceneGeneratorInterface:
 
                         if not glb_path or not os.path.exists(glb_path):
                             logger.error(f"GLB path not found or invalid for selected session model: {glb_path}")
-                            cleared_model_output, _ = clear_preview()
-                            return cleared_model_output, None, f"Error: GLB file not found for {display_name}."
+                            cleared_model_output = clear_preview()
+                            return cleared_model_output, f"Error: GLB file not found for {display_name}."
                         
                         logger.info(f"Loading model from session display: {display_name} (Path: {glb_path})")
-                        model_output_val, _ = update_preview(glb_path)
-                        # The download_btn value should be the glb_path itself
-                        return model_output_val, glb_path, f"Displaying: {display_name}"
+                        model_output_val = update_preview(glb_path)
+                        return model_output_val,  f"Displaying: {display_name}"
 
                     # Set up event handlers for variant generation
                     generate_btn.click(
@@ -870,7 +866,7 @@ class SceneGeneratorInterface:
                     ).then(
                         fn=clear_model_preview_on_object_change,
                         inputs=[],
-                        outputs=[model_output, download_btn, model_status]
+                        outputs=[model_output, model_status]
                     )
 
                     # Enable select variant button when a variant is selected
@@ -900,21 +896,21 @@ class SceneGeneratorInterface:
                     generate_all_3d_btn.click(
                         fn=generate_3d_for_all_selected,
                         inputs=[selected_variants_state, all_session_models_state],
-                        outputs=[model_status, model_output, download_btn, all_session_models_state, all_generated_models_display]
+                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display]
                     )
 
                     # Connect the generate_3d_model function to the preview
                     generate_3d_btn.click(
                         generate_3d_model,
                         inputs=[current_object_state, all_variants_state, selected_variant_index, all_session_models_state],
-                        outputs=[model_status, model_output, download_btn, all_session_models_state, all_generated_models_display]
+                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display]
                     )
                     
                     # Step 3.2: Add event handler for session model selection
                     all_generated_models_display.select(
                         fn=on_session_model_select,
                         inputs=[all_session_models_state], # evt: gr.SelectData is implicitly the first arg to fn
-                        outputs=[model_output, download_btn, model_status]
+                        outputs=[model_output, model_status]
                     )
 
                 # Update object list when the tab is selected

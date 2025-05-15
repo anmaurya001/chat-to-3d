@@ -16,13 +16,13 @@ def create_glb_preview():
                 exposure=10.0,
                 height=400
             )
-        with gr.Column(scale=1):
-            download_btn = gr.DownloadButton(
-                label="Download GLB",
-                interactive=False
-            )
+        # with gr.Column(scale=1):
+        #     download_btn = gr.DownloadButton(
+        #         label="Download GLB",
+        #         interactive=False
+        #     )
     
-    return model_output, download_btn
+    return model_output
 
 def update_preview(glb_path: str) -> tuple:
     """
@@ -32,17 +32,17 @@ def update_preview(glb_path: str) -> tuple:
         glb_path (str): Path to the GLB file
         
     Returns:
-        tuple: (glb_path, True) - The GLB path and True to enable the download button
+        tuple: (glb_path, True) - The GLB path 
     """
     if not os.path.exists(glb_path):
-        return None, False
-    return glb_path, True
+        return None
+    return glb_path
 
 def clear_preview() -> tuple:
     """
     Clears the GLB preview.
     
     Returns:
-        tuple: (None, False) - Clears the preview and disables the download button
+        tuple: (None) - Clears the preview
     """
-    return None, False 
+    return None

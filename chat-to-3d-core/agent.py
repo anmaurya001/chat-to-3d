@@ -4,7 +4,7 @@ from griptape.structures import Agent
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from griptape.memory.structure import ConversationMemory
 from griptape.rules import Rule
-from config import AGENT_MODEL, AGENT_BASE_URL, LOG_LEVEL, LOG_FORMAT
+from config import AGENT_MODEL, AGENT_BASE_URL, LOG_LEVEL, LOG_FORMAT, MAX_PROMPT_LENGTH
 from utils import save_prompts_to_json
 
 # Set up logging
@@ -68,10 +68,7 @@ class ScenePlanningAgent:
                 "\n1. Generate 3D prompts for your selected objects (click the 'Generate 3D Prompts' button)"
                 "\n2. Get more suggestions for the scene"
                 "\n3. Make any other changes to the scene"
-            ),
-            Rule(
-                "If the user directly requests a specific object (e.g., 'add a sofa' or 'I want a table'), include it in the suggested objects list in the same format."
-            ),
+            ),   
             Rule(
                 "Keep object names simple, clear, and consistent. Use the same name format for the same object type."
             ),
@@ -278,8 +275,8 @@ class ScenePlanningAgent:
                     if current_object and current_prompt:
                         prompt_text = " ".join(current_prompt)
                         word_count = len(prompt_text.split())
-                        if word_count > 30:
-                            prompt_text = " ".join(prompt_text.split()[:30])
+                        if word_count > MAX_PROMPT_LENGTH:
+                            prompt_text = " ".join(prompt_text.split()[:MAX_PROMPT_LENGTH])
                         object_prompts[current_object] = prompt_text
                     current_object = (
                         line.split("Object:")[-1].strip().strip("*").strip()
@@ -292,8 +289,8 @@ class ScenePlanningAgent:
             if current_object and current_prompt:
                 prompt_text = " ".join(current_prompt)
                 word_count = len(prompt_text.split())
-                if word_count > 30:
-                    prompt_text = " ".join(prompt_text.split()[:30])
+                if word_count > MAX_PROMPT_LENGTH:
+                    prompt_text = " ".join(prompt_text.split()[:MAX_PROMPT_LENGTH])
                 object_prompts[current_object] = prompt_text
 
             if not object_prompts:
