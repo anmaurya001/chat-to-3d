@@ -1,3 +1,4 @@
 python-dotenv
 griptape[all]
 psutil
+accelerate

@@ -4,7 +4,7 @@ from griptape.structures import Agent
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from griptape.memory.structure import ConversationMemory
 from griptape.rules import Rule
-from config import AGENT_MODEL, AGENT_BASE_URL, LOG_LEVEL, LOG_FORMAT
+from config import AGENT_MODEL, AGENT_BASE_URL, LOG_LEVEL, LOG_FORMAT, MAX_PROMPT_LENGTH
 from utils import save_prompts_to_json
 
 # Set up logging
@@ -28,6 +28,9 @@ class ScenePlanningAgent:
                 "Your primary task is to suggest objects for the 3D scene based on user requests."
             ),
             Rule(
+                "Always suggest objects in singular form (e.g., 'Palm Tree' instead of 'Palm Trees', 'Beach Chair' instead of 'Beach Chairs')."
+            ),
+            Rule(
                 "Always format object names with proper capitalization and spaces (e.g., 'Coffee Table' not 'coffee_table' or 'coffee table')."
             ),
             Rule(
@@ -35,6 +38,7 @@ class ScenePlanningAgent:
                 "\n- Suggest between 5 to 8 objects"
                 "\n- Ensure the objects complement each other"
                 "\n- Consider the scene's purpose and style"
+                "\n- Always use singular form for each object"
             ),
             Rule(
                 "When the user requests specific objects (e.g., 'add a sofa' or 'I want a table'):"
@@ -42,6 +46,7 @@ class ScenePlanningAgent:
                 "\n- Suggest 1-3 variations of the requested object"
                 "\n- Keep suggestions relevant to the specific request"
                 "\n- DO NOT suggest the same object type multiple times"
+                "\n- Always use singular form (e.g., 'Chair' not 'Chairs')"
             ),
             Rule(
                 "Before suggesting objects:"
@@ -63,10 +68,7 @@ class ScenePlanningAgent:
                 "\n1. Generate 3D prompts for your selected objects (click the 'Generate 3D Prompts' button)"
                 "\n2. Get more suggestions for the scene"
                 "\n3. Make any other changes to the scene"
-            ),
-            Rule(
-                "If the user directly requests a specific object (e.g., 'add a sofa' or 'I want a table'), include it in the suggested objects list in the same format."
-            ),
+            ),   
             Rule(
                 "Keep object names simple, clear, and consistent. Use the same name format for the same object type."
             ),
@@ -103,31 +105,62 @@ class ScenePlanningAgent:
         """Get rules for 3D prompt generation phase."""
         return [
             Rule(
-                "You are now in 3D prompt generation mode. Your task is to create detailed prompts for each object in the scene."
+                "You are now in 3D prompt generation mode. Your task is to create detailed prompts for each object in the scene, suitable for generating 2D images that will later be used for 3D model creation."
             ),
             Rule(
-                "For each object, focus on key visual and physical characteristics."
+                "Each prompt MUST start with the object type followed by a comma, then describe its characteristics."
+                "\nExample: 'Beach Chair, ergonomic with curved backrest...'"
+                "\nExample: 'Beach Umbrella, colorful striped canopy...'"
             ),
             Rule(
-                "Include details about the object's shape, materials, and surface properties."
+                "The descriptions should be highly detailed and visually rich, suitable for a text-to-image generation model."
+            ),
+            Rule(
+                "The prompt must specify a plain or empty background (e.g., 'on a white background', 'isolated', 'no background'), ensuring only the object is depicted."
+            ),
+            Rule(
+                "Focus ONLY on the physical and visual characteristics of each object itself."
+            ),
+            Rule(
+                "For each object, describe:"
+                "\n- Shape and form"
+                "\n- Materials and textures"
+                "\n- Colors and patterns"
+                "\n- Specific features and details"
+            ),
+            Rule(
+                "DO NOT include any information about:"
+                "\n- Location or placement in a larger scene (other than specifying an empty background)"
+                "\n- Surrounding objects"
+                "\n- Scene context (e.g. 'a beach scene')"
+                "\n- Relative positions"
             ),
             Rule(
                 "DO NOT include any measurements or specific dimensions in the prompts."
             ),
             Rule(
-                "Incorporate the object's context and relationship to other objects in the scene."
+                "Keep each object's prompt to exactly 30 words or less for optimal generation quality."
             ),
             Rule(
-                "Keep each object's prompt to exactly 40 words or less for optimal generation quality."
-            ),
-            Rule(
-                "Use descriptive adjectives and specific material terms to enhance the 3D generation."
+                "Use descriptive adjectives and specific material terms to enhance the 2D image generation."
             ),
             Rule(
                 "Generate a separate prompt for each object in the scene."
             ),
             Rule(
                 "Format each object's prompt with 'Object:' and 'Prompt:' labels."
+            ),
+            Rule(
+                "Each prompt should be self-contained and describe only the object itself against a plain/empty background."
+            ),
+            Rule(
+                "Focus on details that will help create an accurate and clear 2D image of the object."
+            ),
+            Rule(
+                "The first word of each prompt MUST be the object type, followed by a comma."
+                "\nExample: 'Beach Chair, ergonomic with...'"
+                "\nExample: 'Beach Umbrella, colorful with...'"
+                "\nExample: 'Beach Towel, soft and plush...'"
             ),
         ]
 
@@ -209,13 +242,17 @@ class ScenePlanningAgent:
             self.agent.rules = self._get_prompt_generation_rules()
             self.is_generating_prompts = True
 
-            generation_prompt = f"""Generate detailed 3D prompts for each object in the current scene, focusing on:
-            1. Visual and physical characteristics
-            2. Materials and surface properties
-            3. Context within the scene
-            Generate prompt for each object strictly from this list: {initial_description}
-            Keep each prompt to exactly 40 words or less.
+            generation_prompt = f"""Generate detailed visual prompts suitable for 2D image generation for each object in the current scene.
+            The prompts will be used to create images that are later converted to 3D models.
+            Focus on:
+            1. Detailed visual and physical characteristics (shape, form, textures, colors, patterns, specific features).
+            2. Ensuring the prompt specifies a plain or empty background (e.g., 'on a white background', 'isolated', 'no background'), so only the object is depicted.
+            
+            Generate a prompt for each object strictly from this list: {initial_description}.
+            Each prompt MUST start with the object type followed by a comma.
+            Keep each prompt to exactly 30 words or less.
             Format each object's prompt with 'Object:' and 'Prompt:' labels.
+            Do NOT include any surrounding scene context or other objects in the prompt itself (beyond the plain background specification).
             """
 
             response = self.agent.run(generation_prompt)
@@ -238,8 +275,8 @@ class ScenePlanningAgent:
                     if current_object and current_prompt:
                         prompt_text = " ".join(current_prompt)
                         word_count = len(prompt_text.split())
-                        if word_count > 40:
-                            prompt_text = " ".join(prompt_text.split()[:40])
+                        if word_count > MAX_PROMPT_LENGTH:
+                            prompt_text = " ".join(prompt_text.split()[:MAX_PROMPT_LENGTH])
                         object_prompts[current_object] = prompt_text
                     current_object = (
                         line.split("Object:")[-1].strip().strip("*").strip()
@@ -252,8 +289,8 @@ class ScenePlanningAgent:
             if current_object and current_prompt:
                 prompt_text = " ".join(current_prompt)
                 word_count = len(prompt_text.split())
-                if word_count > 40:
-                    prompt_text = " ".join(prompt_text.split()[:40])
+                if word_count > MAX_PROMPT_LENGTH:
+                    prompt_text = " ".join(prompt_text.split()[:MAX_PROMPT_LENGTH])
                 object_prompts[current_object] = prompt_text
 
             if not object_prompts:

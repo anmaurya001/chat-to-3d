@@ -23,6 +23,7 @@ DEFAULT_SEED = 42
 DEFAULT_SPARSE_STEPS = 25
 DEFAULT_SLAT_STEPS = 25
 DEFAULT_CFG_STRENGTH = 7.5
+MAX_PROMPT_LENGTH = 50
 LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 

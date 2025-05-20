@@ -9,8 +9,11 @@ import numpy as np
 import torch
 import gc
 from pathlib import Path
-from trellis.pipelines import TrellisTextTo3DPipeline
+from typing import Tuple
+from trellis.pipelines import TrellisTextTo3DPipeline, TrellisImageTo3DPipeline
 from trellis.utils import postprocessing_utils, render_utils
+from easydict import EasyDict as edict
+from diffusers import SanaSprintPipeline
 import imageio
 from config import (
     SPCONV_ALGO,
@@ -24,6 +27,8 @@ from config import (
     TRELLIS_MODEL_NAME_MAP,
     DEFAULT_TRELLIS_MODEL,
 )
+from trellis.representations import Gaussian, MeshExtractResult
+from PIL import Image
 
 # Set up logging
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -34,12 +39,16 @@ class AssetGenerator:
     def __init__(self, default_model=DEFAULT_TRELLIS_MODEL):
         os.environ["SPCONV_ALGO"] = SPCONV_ALGO
         self.pipeline = None
+        self.sana_pipeline = None
+        self.trellis_model = None
         self.current_model = None
         self.termination_thread = None
         self.start_termination_server()
         
         # Load the default model during initialization
-        self.load_model(default_model)
+        #self.load_model(default_model)
+        self.load_sana_model()
+        self.initialize_trellis()
     
     def start_termination_server(self):
         """Start the termination server in a separate thread"""
@@ -121,6 +130,21 @@ class AssetGenerator:
             logger.error(f"Error loading model {model_name}: {e}")
             return False
 
+    def load_sana_model(self):
+        """Load the SANA model for image generation."""
+        try:
+            logger.info("Loading SANA model...")
+            self.sana_pipeline = SanaSprintPipeline.from_pretrained(
+                "Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
+                torch_dtype=torch.bfloat16
+            )
+            self.sana_pipeline.to("cuda:0")
+            logger.info("Successfully loaded SANA model")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading SANA model: {e}")
+            return False
+
     def __del__(self):
         """Cleanup when the object is destroyed"""
         self.cleanup()
@@ -157,6 +181,61 @@ class AssetGenerator:
         except Exception as e:
             logger.error(f"Error generating preview image: {e}")
             return False
+
+    def generate_variants(
+        self,
+        prompt,
+        output_dir,
+        num_variants=3,
+        seed=DEFAULT_SEED,
+        num_inference_steps=2
+    ):
+        """Generate multiple image variants using SANA model."""
+        try:
+            if self.sana_pipeline is None:
+                if not self.load_sana_model():
+                    return False, "Failed to load SANA model", []
+
+            variants = []
+            for i in range(num_variants):
+                # Use different seeds for each variant
+                variant_seed = seed + i
+                
+                # Generate image
+                image = self.sana_pipeline(
+                    prompt=prompt,
+                    num_inference_steps=num_inference_steps,
+                    generator=torch.Generator("cuda").manual_seed(variant_seed)
+                ).images[0]
+                
+                # Handle versioning for the base filename
+                base_filename = f"variant_{i+1}"
+                version = 0
+                while True:
+                    if version == 0:
+                        # First try without version number
+                        image_path = os.path.join(output_dir, f"{base_filename}.png")
+                        if not os.path.exists(image_path):
+                            break
+                        version = 1
+                    else:
+                        # Try with version number
+                        image_path = os.path.join(output_dir, f"{base_filename}_v{version}.png")
+                        if not os.path.exists(image_path):
+                            break
+                        version += 1
+                
+                # Save the image
+                image.save(image_path)
+                
+                variants.append({
+                    "image_path": image_path,
+                    "seed": variant_seed
+                })
+
+            return True, f"Successfully generated {num_variants} image variants", variants
+        except Exception as e:
+            return False, f"Error generating image variants: {str(e)}", []
 
     def generate_assets(
         self,
@@ -332,4 +411,152 @@ class AssetGenerator:
             return success, f"Model switched to {model_name}. VRAM usage logged."
         except Exception as e:
             return False, f"Error during model switch: {str(e)}"
+
+    def initialize_trellis(self):
+        """Initialize the TRELLIS image-to-3D model."""
+        try:
+            self.trellis_model = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
+            self.trellis_model.cuda()
+        except Exception as e:
+            logger.error(f"Failed to initialize TRELLIS model: {e}")
+            raise
+
+    def pack_state(self, gs: Gaussian, mesh: MeshExtractResult) -> dict:
+        return {
+            'gaussian': {
+                **gs.init_params,
+                '_xyz': gs._xyz.cpu().numpy(),
+                '_features_dc': gs._features_dc.cpu().numpy(),
+                '_scaling': gs._scaling.cpu().numpy(),
+                '_rotation': gs._rotation.cpu().numpy(),
+                '_opacity': gs._opacity.cpu().numpy(),
+            },
+            'mesh': {
+                'vertices': mesh.vertices.cpu().numpy(),
+                'faces': mesh.faces.cpu().numpy(),
+            },
+        }
+    
+    
+    def unpack_state(self, state: dict) -> Tuple[Gaussian, edict, str]:
+        gs = Gaussian(
+            aabb=state['gaussian']['aabb'],
+            sh_degree=state['gaussian']['sh_degree'],
+            mininum_kernel_size=state['gaussian']['mininum_kernel_size'],
+            scaling_bias=state['gaussian']['scaling_bias'],
+            opacity_bias=state['gaussian']['opacity_bias'],
+            scaling_activation=state['gaussian']['scaling_activation'],
+        )
+        gs._xyz = torch.tensor(state['gaussian']['_xyz'], device='cuda')
+        gs._features_dc = torch.tensor(state['gaussian']['_features_dc'], device='cuda')
+        gs._scaling = torch.tensor(state['gaussian']['_scaling'], device='cuda')
+        gs._rotation = torch.tensor(state['gaussian']['_rotation'], device='cuda')
+        gs._opacity = torch.tensor(state['gaussian']['_opacity'], device='cuda')
+        
+        mesh = edict(
+            vertices=torch.tensor(state['mesh']['vertices'], device='cuda'),
+            faces=torch.tensor(state['mesh']['faces'], device='cuda'),
+        )
+        
+        return gs, mesh
+
+    def extract_glb(self, gaussian, mesh, output_dir, mesh_simplify=0.95, texture_size=1024):
+        """
+        Extract a GLB file from the 3D model.
+
+        Args:
+            gaussian: The gaussian representation
+            mesh: The mesh representation
+            output_dir (str): Directory to save the GLB file
+            mesh_simplify (float): The mesh simplification factor
+            texture_size (int): The texture resolution
+
+        Returns:
+            str: The path to the extracted GLB file
+        """
+        try:
+            logger.info("Extracting GLB file")
+            glb = postprocessing_utils.to_glb(
+                gaussian, 
+                mesh, 
+                simplify=mesh_simplify, 
+                texture_size=texture_size, 
+                verbose=False
+            )
+            glb_path = os.path.join(output_dir, 'model.glb')
+            glb.export(glb_path)
+            torch.cuda.empty_cache()
+            return glb_path
+        except Exception as e:
+            logger.error(f"Error extracting GLB: {str(e)}", exc_info=True)
+            raise
+
+    def generate_3d_from_image(self, image_path, output_dir, seed=0):
+        """Generate a 3D model from an image using TRELLIS."""
+        try:
+            logger.info(f"Starting 3D generation from image: {image_path}")
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"Output directory: {output_dir}")
+            
+            # Load and preprocess image
+            logger.info("Loading input image")
+            image = Image.open(image_path)
+            logger.info(f"Original image size: {image.size}")
+            
+            # Resize to 512x512
+            target_size = (512, 512)
+            image = image.resize(target_size, Image.Resampling.LANCZOS)
+            logger.info(f"Reshaped image size: {image.size}")
+            
+            # Apply TRELLIS preprocessing
+            logger.info("Applying TRELLIS preprocessing")
+            image = self.trellis_model.preprocess_image(image)
+            logger.info("Preprocessing completed")
+            
+            # Generate 3D model
+            logger.info("Initializing TRELLIS model run")
+            logger.info("Running sparse structure sampling...")
+            outputs = self.trellis_model.run(
+                image,
+                seed=seed,
+                formats=["gaussian", "mesh"],
+                preprocess_image=False,
+                sparse_structure_sampler_params={
+                    "steps": 12,
+                    "cfg_strength": 7.5,
+                },
+                slat_sampler_params={
+                    "steps": 12,
+                    "cfg_strength": 3.0,
+                },
+            )
+            logger.info("TRELLIS model run completed")
+            
+            # Clear CUDA cache before GLB extraction
+            logger.info("Clearing CUDA cache before GLB extraction")
+            torch.cuda.empty_cache()
+            
+            # Pack and unpack state for GLB extraction
+            state = self.pack_state(outputs['gaussian'][0], outputs['mesh'][0])
+            gs, mesh = self.unpack_state(state)
+            
+            # Extract GLB file
+            glb_path = self.extract_glb(
+                gs,
+                mesh,
+                output_dir
+            )
+            
+            logger.info("3D generation completed successfully")
+            return True, "Successfully generated 3D model", {
+                'glb_path': glb_path
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating 3D model: {str(e)}", exc_info=True)
+            # Clear CUDA cache in case of error
+            torch.cuda.empty_cache()
+            return False, f"Error generating 3D model: {str(e)}", None
 
