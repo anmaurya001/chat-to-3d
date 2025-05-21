@@ -20,7 +20,7 @@ mkdir -p "$LOCAL_NIM_CACHE"
 chmod -R a+w "$LOCAL_NIM_CACHE"
 
 # Run container
-podman run -it --rm \
+podman run --name CHAT_TO_3D -it --rm \
     --device nvidia.com/gpu=all \
     --shm-size=8GB \
     -e NGC_API_KEY=$NGC_API_KEY \
