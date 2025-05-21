@@ -338,11 +338,16 @@ class SceneGeneratorInterface:
                                 object_fit="contain",
                                 value=[],
                             )
-                            # with gr.Row():
-                            generate_3d_btn = gr.Button(
-                                "Generate 3D Model for Selected Variant",
-                                interactive=False,
-                            )
+                            with gr.Row():
+                                generate_3d_btn = gr.Button(
+                                    "Generate 3D Model for Selected Variant",
+                                    interactive=False,
+                                )
+                                clear_selection_btn = gr.Button(
+                                    "Clear Selection",
+                                    interactive=False,
+                                    variant="secondary"
+                                )
                             generate_all_3d_btn = gr.Button(
                             "Generate 3D Models for All Selected Variants",
                             interactive=False,
@@ -658,7 +663,7 @@ class SceneGeneratorInterface:
                     def on_overview_variant_select(evt: gr.SelectData, selected_variants):
                         """Handle selection of a variant from the overview gallery."""
                         if not selected_variants:
-                            return None, gr.Button(interactive=False)
+                            return None, gr.Button(interactive=False), gr.Button(interactive=False)
                         
                         # Get the selected variant's image path from the event
                         # In Gradio's Gallery component, the selected value is a dict with 'image' and 'caption' keys
@@ -667,7 +672,7 @@ class SceneGeneratorInterface:
                         
                         if not selected_data or not isinstance(selected_data, dict) or 'image' not in selected_data:
                             logger.warning(f"Invalid selection data: {selected_data}")
-                            return None, gr.Button(interactive=False)
+                            return None, gr.Button(interactive=False), gr.Button(interactive=False)
                             
                         selected_image_path = selected_data['image']['path']
                         selected_filename = os.path.basename(selected_image_path)
@@ -680,10 +685,47 @@ class SceneGeneratorInterface:
                             logger.info(f"Comparing with variant filename: {variant_filename}")
                             if variant_filename == selected_filename:
                                 logger.info(f"Found matching variant for object: {obj_name}")
-                                return variant, gr.Button(interactive=True)
+                                return variant, gr.Button(interactive=True), gr.Button(interactive=True)
                         
                         logger.warning(f"No matching variant found for image: {selected_filename}")
-                        return None, gr.Button(interactive=False)
+                        return None, gr.Button(interactive=False), gr.Button(interactive=False)
+
+                    def clear_selected_variant(selected_variants, selected_overview_variant):
+                        """Clear the selected variant and reset button states."""
+                        logger.info("Clearing selected variant")
+                        
+                        if not selected_overview_variant:
+                            return None, gr.Button(interactive=False), gr.Button(interactive=False), "No variant selected to clear", selected_variants, []
+                        
+                        # Get the image path of the selected variant
+                        selected_image_path = selected_overview_variant.get('image_path', '')
+                        selected_filename = os.path.basename(selected_image_path)
+                        
+                        # Create a copy of selected variants to modify
+                        updated_selected_variants = dict(selected_variants) if selected_variants else {}
+                        
+                        # Find and remove the selected variant
+                        for obj_name, variant in list(updated_selected_variants.items()):
+                            variant_filename = os.path.basename(variant['image_path'])
+                            if variant_filename == selected_filename:
+                                logger.info(f"Removing variant for object: {obj_name}")
+                                del updated_selected_variants[obj_name]
+                                break
+                        
+                        # Create gallery items for the updated selected variants
+                        gallery_items = [
+                            (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
+                            for obj_name, v in updated_selected_variants.items()
+                        ]
+                        
+                        return (
+                            None,  # Clear selected overview variant
+                            gr.Button(interactive=False),  # Disable generate button
+                            gr.Button(interactive=False),  # Disable clear selection button
+                            f"Cleared selection for {selected_filename}",  # Status message
+                            updated_selected_variants,  # Updated selected variants state
+                            gallery_items  # Updated gallery items
+                        )
 
                     def generate_3d_model(object_name, all_variants_state, selected_idx, current_all_session_models, selected_overview_variant):
                         """Generate a 3D model for the selected object using the selected variant."""
@@ -770,7 +812,7 @@ class SceneGeneratorInterface:
                                 glb_path_for_preview, 
                                 updated_all_session_models, # The updated state itself
                                 gr.update(samples=final_dataset_display_data), # Updated for Dataset
-                                gr.Button(interactive=True)  # Re-enable button after successful generation
+                                gr.Button(interactive=True)  # Re-enable generate button
                             )
                             
                         except Exception as e:
@@ -779,7 +821,7 @@ class SceneGeneratorInterface:
                             cleared_glb_path = clear_preview()
                             # Return current (unmodified by this error) session models and its display data
                             current_dataset_display_data = [[item['display_name']] for item in current_all_session_models]
-                            return error_msg, cleared_glb_path, current_all_session_models, gr.update(samples=current_dataset_display_data), gr.Button(interactive=True) # Re-enable button on error
+                            return error_msg, cleared_glb_path, current_all_session_models, gr.update(samples=current_dataset_display_data), gr.Button(interactive=True)
 
                     def generate_3d_for_all_selected(selected_variants, current_all_session_models):
                         """Generate 3D models for all selected variants."""
@@ -959,7 +1001,21 @@ class SceneGeneratorInterface:
                     selected_variants_gallery.select(
                         fn=on_overview_variant_select,
                         inputs=[selected_variants_state],
-                        outputs=[selected_overview_variant, generate_3d_btn]  # This is the only place where generate_3d_btn gets enabled
+                        outputs=[selected_overview_variant, generate_3d_btn, clear_selection_btn]  # Added clear_selection_btn
+                    )
+
+                    # Add handler for clear selection button
+                    clear_selection_btn.click(
+                        fn=clear_selected_variant,
+                        inputs=[selected_variants_state, selected_overview_variant],
+                        outputs=[
+                            selected_overview_variant,
+                            generate_3d_btn,
+                            clear_selection_btn,
+                            model_status,
+                            selected_variants_state,
+                            selected_variants_gallery
+                        ]
                     )
 
                     # Update generate_3d_btn click handler to include selected_overview_variant
