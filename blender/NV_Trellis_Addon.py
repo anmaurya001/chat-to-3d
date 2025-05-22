@@ -21,6 +21,7 @@ import ctypes
 import logging
 from bpy.types import Operator, Panel, AddonPreferences
 from bpy.props import StringProperty, EnumProperty
+from pathlib import Path
 
 # Set up logging to file and console
 log_file = os.path.join(os.path.expanduser("~"), "trellis_addon.log")
@@ -72,13 +73,40 @@ def setup_logging():
 
 def get_conda_python_path():
     """Attempt to find the Conda 'trellis' environment's Python executable."""
-    conda_base = os.environ.get("CONDA_PREFIX")
-    if conda_base:
-        logger.debug("Using CONDA_PREFIX: %s", conda_base)
-        if os.path.basename(conda_base) == "trellis" and os.path.basename(os.path.dirname(conda_base)) == "envs":
-            conda_base = os.path.dirname(os.path.dirname(conda_base))
-            logger.debug("Adjusted Conda base from CONDA_PREFIX: %s", conda_base)
+    # Step 1: Try to find the Conda executable
+    conda_exe = os.environ.get("CONDA_EXE")
+    if conda_exe and os.path.isfile(conda_exe):
+        logger.info("Using CONDA_EXE: %s", conda_exe)
     else:
+        # Check default Conda installation paths
+        default_paths = [
+            Path(os.path.expanduser("~/Miniconda3/Scripts/conda.exe")),
+            Path(os.path.expanduser("~/Anaconda3/Scripts/conda.exe")),
+            Path("C:/ProgramData/Miniconda3/Scripts/conda.exe"),
+            Path("C:/ProgramData/Anaconda3/Scripts/conda.exe")
+        ]
+        for path in default_paths:
+            if path.exists():
+                logger.info("Found Conda executable at: %s", path)
+                conda_exe = str(path)
+                # Update PATH to include the Conda executable's directory
+                os.environ["PATH"] = f"{path.parent};{os.environ.get('PATH', '')}"
+                break
+        else:
+            logger.warning("No Conda executable found in CONDA_EXE or default paths")
+            conda_exe = None
+
+    # Step 2: Derive Conda base path
+    if conda_exe:
+        # Derive base path from conda_exe
+        if platform.system() == "Windows":
+            conda_base = os.path.dirname(os.path.dirname(conda_exe))  # Remove Scripts/conda.exe
+        else:
+            conda_base = os.path.dirname(conda_exe)  # Remove bin/conda
+        logger.info("Derived Conda base from conda_exe: %s", conda_base)
+    else:
+        # Fallback to 'conda info --base'
+        logger.info("Attempting to find Conda base using 'conda info --base'")
         try:
             result = subprocess.run(
                 ["conda", "info", "--base"],
@@ -93,16 +121,18 @@ def get_conda_python_path():
                 logger.warning("Could not locate Conda base using 'conda info --base': %s", result.stderr)
                 conda_base = os.path.expanduser("~/Miniconda3")
                 logger.debug("Falling back to default Conda base: %s", conda_base)
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
             logger.error("Failed to locate Conda base using 'conda info --base': %s", str(e))
             conda_base = os.path.expanduser("~/Miniconda3")
             logger.debug("Falling back to default Conda base: %s", conda_base)
 
+    # Step 3: Construct path to Python executable in the 'trellis' environment
     if platform.system() == "Windows":
         python_path = os.path.join(conda_base, "envs", "trellis", "python.exe")
     else:
         python_path = os.path.join(conda_base, "envs", "trellis", "bin", "python")
-    
+
+    # Step 4: Verify the Python executable exists and is functional
     if os.path.isfile(python_path):
         try:
             result = subprocess.run(
@@ -337,6 +367,35 @@ def process_exists(pid):
         logger.debug(f"psutil error while checking PID {pid}: {e}")
         return False
 
+def stop_chat_to_3d_container():
+    """Run 'wsl podman stop CHAT_TO_3D' to stop the CHAT_TO_3D container."""
+    try:
+        # Run the command
+        result = subprocess.run(
+            ["wsl", "podman", "stop", "CHAT_TO_3D"],
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        
+        # Check the result
+        if result.returncode == 0:
+            logger.info("Successfully stopped CHAT_TO_3D container: %s", result.stdout.strip())
+            return True
+        else:
+            logger.error("Failed to stop CHAT_TO_3D container: %s", result.stderr.strip())
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error("Command 'wsl podman stop CHAT_TO_3D' timed out after 30 seconds")
+        return False
+    except subprocess.SubprocessError as e:
+        logger.error("Error running 'wsl podman stop CHAT_TO_3D': %s", str(e))
+        return False
+    except FileNotFoundError:
+        logger.error("WSL or podman not found. Ensure WSL and podman are installed and accessible")
+        return False
+    
 class TrellisAddonPreferences(AddonPreferences):
     bl_idname = __name__
 
@@ -401,6 +460,9 @@ class TRELLIS_OT_ManageTrellis(Operator):
     
     def start_llm(self):
         """Start the LLM service and capture its output, switching CWD to nim_llm directory."""
+        """Stop and Running LLM Containers"""
+        stop_chat_to_3d_container()
+
         global llm_status
         llm_status = "STARTING..."
         original_cwd = os.getcwd()
@@ -510,6 +572,7 @@ class TRELLIS_OT_ManageTrellis(Operator):
                     self.stderr_thread = None
                 log_output_stop.clear()
 
+            stop_chat_to_3d_container()
             terminator = TrellisTerminator()
             tw = terminator.terminate_and_wait()
             print(f'tw output is {str(tw)}')
