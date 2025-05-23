@@ -29,6 +29,7 @@ from config import (
 )
 from trellis.representations import Gaussian, MeshExtractResult
 from PIL import Image
+import datetime
 
 # Set up logging
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -184,6 +185,7 @@ class AssetGenerator:
 
     def generate_variants(
         self,
+        object_name,
         prompt,
         output_dir,
         num_variants=3,
@@ -195,6 +197,9 @@ class AssetGenerator:
             if self.sana_pipeline is None:
                 if not self.load_sana_model():
                     return False, "Failed to load SANA model", []
+
+            # Format object name: lowercase and replace spaces with underscores
+            formatted_object_name = object_name.lower().replace(" ", "_")
 
             variants = []
             for i in range(num_variants):
@@ -208,29 +213,21 @@ class AssetGenerator:
                     generator=torch.Generator("cuda").manual_seed(variant_seed)
                 ).images[0]
                 
-                # Handle versioning for the base filename
-                base_filename = f"variant_{i+1}"
-                version = 0
-                while True:
-                    if version == 0:
-                        # First try without version number
-                        image_path = os.path.join(output_dir, f"{base_filename}.png")
-                        if not os.path.exists(image_path):
-                            break
-                        version = 1
-                    else:
-                        # Try with version number
-                        image_path = os.path.join(output_dir, f"{base_filename}_v{version}.png")
-                        if not os.path.exists(image_path):
-                            break
-                        version += 1
+                # Generate timestamp
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # Create filename using convention: objectname_seed_timestamp
+                image_path = os.path.join(output_dir, f"{formatted_object_name}_{variant_seed}_{timestamp}.png")
                 
                 # Save the image
                 image.save(image_path)
                 
                 variants.append({
                     "image_path": image_path,
-                    "seed": variant_seed
+                    "seed": variant_seed,
+                    "timestamp": timestamp,
+                    "object_name": object_name,  # Keep original object name in the variant data
+                    "formatted_object_name": formatted_object_name
                 })
 
             return True, f"Successfully generated {num_variants} image variants", variants
@@ -460,7 +457,7 @@ class AssetGenerator:
         
         return gs, mesh
 
-    def extract_glb(self, gaussian, mesh, output_dir, mesh_simplify=0.95, texture_size=1024):
+    def extract_glb(self, gaussian, mesh, output_dir, model_name, mesh_simplify=0.95, texture_size=1024):
         """
         Extract a GLB file from the 3D model.
 
@@ -483,7 +480,7 @@ class AssetGenerator:
                 texture_size=texture_size, 
                 verbose=False
             )
-            glb_path = os.path.join(output_dir, 'model.glb')
+            glb_path = os.path.join(output_dir, f'{model_name}.glb')
             glb.export(glb_path)
             torch.cuda.empty_cache()
             return glb_path
@@ -491,10 +488,11 @@ class AssetGenerator:
             logger.error(f"Error extracting GLB: {str(e)}", exc_info=True)
             raise
 
-    def generate_3d_from_image(self, image_path, output_dir, seed=0):
+    def generate_3d_from_image(self, object_name, image_path, output_dir,image_seed, seed=0):
         """Generate a 3D model from an image using TRELLIS."""
         try:
-            logger.info(f"Starting 3D generation from image: {image_path}")
+            formatted_object_name = object_name.lower().replace(" ", "_")
+            logger.info(f"Starting 3D generation from image: {image_path} for object: {formatted_object_name}")
             
             # Create output directory if it doesn't exist
             os.makedirs(output_dir, exist_ok=True)
@@ -541,17 +539,24 @@ class AssetGenerator:
             # Pack and unpack state for GLB extraction
             state = self.pack_state(outputs['gaussian'][0], outputs['mesh'][0])
             gs, mesh = self.unpack_state(state)
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_name = f"{formatted_object_name}_{image_seed}_{timestamp}"
             
             # Extract GLB file
             glb_path = self.extract_glb(
                 gs,
                 mesh,
-                output_dir
+                output_dir,
+                model_name
             )
             
             logger.info("3D generation completed successfully")
             return True, "Successfully generated 3D model", {
-                'glb_path': glb_path
+                'glb_path': glb_path,
+                'model_name': model_name,
+                'image_seed': image_seed,
+                'timestamp': timestamp
             }
             
         except Exception as e:

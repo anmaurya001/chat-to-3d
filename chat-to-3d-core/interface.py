@@ -8,6 +8,7 @@ from config import (
     DEFAULT_SPARSE_STEPS,
     DEFAULT_SLAT_STEPS,
     OUTPUT_DIR,
+    SCENE_DIR,
     PROMPTS_FILE,
     INITIAL_MESSAGE,
     DEFAULT_TRELLIS_MODEL,
@@ -15,6 +16,7 @@ from config import (
 import json
 import os
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +302,6 @@ class SceneGeneratorInterface:
                                     lines=2,
                                     interactive=False
                                 )
-
                                               
                         with gr.Column(scale=3):
                             gr.Markdown("### Image Variant Gallery")   
@@ -375,9 +376,19 @@ class SceneGeneratorInterface:
                                         components=["text"], # Just display name for now
                                         headers=["Generated Model"],
                                         label="Session Models",
-                                        samples=[], # Changed from value=[] to samples=[]
+                                        samples=[], 
                                         samples_per_page=5,
                                     )
+                                    delete_selected_btn = gr.Button("Delete Selected", variant="secondary", interactive=False)
+
+                                    gr.Markdown("#### Save Generated Models")
+                                    with gr.Row():
+                                        save_folder = gr.Textbox(
+                                            label="Save scene as",
+                                            placeholder="Enter scene name...",
+                                            interactive=True
+                                        )
+                                        save_btn = gr.Button("Save Assets")
 
                     # State components
                     current_object_state = gr.State(None)
@@ -388,6 +399,9 @@ class SceneGeneratorInterface:
                     all_variants_state = gr.State({})
                     all_session_models_state = gr.State([]) # Step 1.1: New state for all generated models
                     selected_overview_variant = gr.State(None) # New state for tracking selected overview variant
+
+                    # Add state for selected model index
+                    selected_model_index = gr.State(None)
 
                     def update_object_list():
                         """Update the object dropdown with objects from the prompts file."""
@@ -444,6 +458,71 @@ class SceneGeneratorInterface:
                                 value=[(v['image_path'], f"Variant {i+1} (Seed: {v['seed']})") for i, v in enumerate(variants)]
                             )
                             return gallery
+                        
+                    def build_image_variant_name(object_name, variants):
+                        """Build a formatted image variant name."""
+                        gallery_items = [
+                                (v['image_path'], f"{object_name} (Seed: {v['seed']})")
+                                for i, v in enumerate(variants)
+                            ]
+                        return gallery_items
+                        
+                    def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
+                        """Generate variants for a single object."""
+                        try:
+                            if not object_name:
+                                return "Please select an object first", None, [], all_variants_state
+                            
+                            if not os.path.exists(PROMPTS_FILE):
+                                return "Please generate prompts first in the Chat & Generate Prompts tab", None, [], all_variants_state
+                            
+                            with open(PROMPTS_FILE, 'r') as f:
+                                data = json.load(f)
+                            
+                            object_prompt = None
+                            for scene in data['scenes']:
+                                for obj in scene['objects']:
+                                    if obj['name'] == object_name:
+                                        object_prompt = prompt_display if prompt_display else obj['prompt']
+                                        break
+                                if object_prompt:
+                                    break
+                            
+                            if not object_prompt:
+                                return f"Object '{object_name}' not found in prompts file", None, [], all_variants_state
+                            
+                            object_dir = os.path.join(OUTPUT_DIR, object_name)
+                            os.makedirs(object_dir, exist_ok=True)
+                            
+                            success, message, variants = self.generator.generate_variants(
+                                object_name=object_name,
+                                prompt=object_prompt,
+                                output_dir=object_dir,
+                                num_variants=num_variants,
+                                seed=seed
+                            )
+                            
+                            if not success:
+                                return f"Error: {message}", None, [], all_variants_state
+                            
+                            if all_variants_state is None:
+                                all_variants_state = {}
+                            all_variants_state[object_name] = variants
+                            
+                            # gallery_items = [
+                            #     (v['image_path'], f"{object_name} (Seed: {v['seed']})")
+                            #     for i, v in enumerate(variants)
+                            # ]
+                            
+                            gallery_items = build_image_variant_name(object_name, variants)
+                            return (
+                                f"Successfully generated {len(variants)} variants",
+                                object_name,
+                                gallery_items,
+                                all_variants_state
+                            )
+                        except Exception as e:
+                            return f"Error during generation: {str(e)}", None, [], all_variants_state
 
                     def generate_variants_for_all_objects(seed, num_variants, prompt_display):
                         """Generate variants for all objects in the prompts file."""
@@ -456,8 +535,6 @@ class SceneGeneratorInterface:
                                 data = json.load(f)
                             
                             all_variants = {}
-                            total_objects = len([obj for scene in data['scenes'] for obj in scene['objects']])
-                            processed_objects = 0
                             
                             # Get the current selected object
                             current_object = object_dropdown.value
@@ -474,16 +551,16 @@ class SceneGeneratorInterface:
                                     
                                     # Generate variants
                                     success, message, variants = self.generator.generate_variants(
+                                        object_name=object_name,
                                         prompt=object_prompt,
                                         output_dir=object_dir,
                                         num_variants=num_variants,
-                                        seed=seed + processed_objects  # Use different seed for each object
+                                        seed=seed 
                                     )
                                     
                                     if success:
                                         all_variants[object_name] = variants
                                     
-                                    processed_objects += 1
                             
                             if not all_variants:
                                 return "Failed to generate variants for any objects", None, [], {}
@@ -493,17 +570,18 @@ class SceneGeneratorInterface:
                             selected_object = object_names[0] if object_names else None
                             
                             # Create a list of variants for the selected object only
-                            selected_variants = []
+                            gallery_items = []
                             if selected_object and selected_object in all_variants:
-                                selected_variants = [
-                                    (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
+                                logger.info(f"Selected object: {selected_object}")
+                                gallery_items = [
+                                    (v['image_path'], f"{selected_object} (Seed: {v['seed']})")
                                     for i, v in enumerate(all_variants[selected_object])
                                 ]
                             
                             return (
                                 f"Successfully generated variants for {len(all_variants)} objects",
                                 selected_object,
-                                selected_variants,
+                                gallery_items,
                                 all_variants  # Return all variants for state
                             )
                         except Exception as e:
@@ -517,10 +595,11 @@ class SceneGeneratorInterface:
                         
                         # Get the variants for the selected object
                         if selected_object in all_variants:
-                            variants = [
-                                (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
-                                for i, v in enumerate(all_variants[selected_object])
-                            ]
+                            # variants = [
+                            #     (v['image_path'], f"{selected_object} - Variant {i+1} (Seed: {v['seed']})")
+                            #     for i, v in enumerate(all_variants[selected_object])
+                            # ]
+                            variants = build_image_variant_name(selected_object, all_variants[selected_object])
                             logger.info(f"Found {len(variants)} variants for {selected_object}")
                             return variants
                         logger.warning(f"No variants found for {selected_object}")
@@ -552,61 +631,6 @@ class SceneGeneratorInterface:
                         # The download button value should be None when there's no file
                         logger.info(f"Cleared model output: {cleared_model_output}, Download button value: None")
                         return cleared_model_output, "" # Cleared model, Empty status
-
-                    def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
-                        """Generate variants for a single object."""
-                        try:
-                            if not object_name:
-                                return "Please select an object first", None, [], all_variants_state
-                            
-                            if not os.path.exists(PROMPTS_FILE):
-                                return "Please generate prompts first in the Chat & Generate Prompts tab", None, [], all_variants_state
-                            
-                            with open(PROMPTS_FILE, 'r') as f:
-                                data = json.load(f)
-                            
-                            object_prompt = None
-                            for scene in data['scenes']:
-                                for obj in scene['objects']:
-                                    if obj['name'] == object_name:
-                                        object_prompt = prompt_display if prompt_display else obj['prompt']
-                                        break
-                                if object_prompt:
-                                    break
-                            
-                            if not object_prompt:
-                                return f"Object '{object_name}' not found in prompts file", None, [], all_variants_state
-                            
-                            object_dir = os.path.join(OUTPUT_DIR, object_name)
-                            os.makedirs(object_dir, exist_ok=True)
-                            
-                            success, message, variants = self.generator.generate_variants(
-                                prompt=object_prompt,
-                                output_dir=object_dir,
-                                num_variants=num_variants,
-                                seed=seed
-                            )
-                            
-                            if not success:
-                                return f"Error: {message}", None, [], all_variants_state
-                            
-                            if all_variants_state is None:
-                                all_variants_state = {}
-                            all_variants_state[object_name] = variants
-                            
-                            gallery_items = [
-                                (v['image_path'], f"{object_name} - Variant {i+1} (Seed: {v['seed']})")
-                                for i, v in enumerate(variants)
-                            ]
-                            
-                            return (
-                                f"Successfully generated {len(variants)} variants",
-                                object_name,
-                                gallery_items,
-                                all_variants_state
-                            )
-                        except Exception as e:
-                            return f"Error during generation: {str(e)}", None, [], all_variants_state
 
                     def on_variant_select(object_name, all_variants, evt: gr.SelectData):
                         """Handle variant selection in gallery."""
@@ -657,6 +681,8 @@ class SceneGeneratorInterface:
                             (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
                             for obj_name, v in selected_variants.items()
                         ]
+
+                        # gallery_items = build_image_variant_name(object_name, selected_variants)
                         
                         return gr.update(value=f"Selected variant for {object_name}"), gallery_items
 
@@ -715,8 +741,9 @@ class SceneGeneratorInterface:
                         # Create gallery items for the updated selected variants
                         gallery_items = [
                             (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
-                            for obj_name, v in updated_selected_variants.items()
-                        ]
+                             for obj_name, v in updated_selected_variants.items()
+                         ]
+                       
                         
                         return (
                             None,  # Clear selected overview variant
@@ -775,8 +802,10 @@ class SceneGeneratorInterface:
                             
                             logger.info(f"Calling TRELLIS model for 3D generation for {object_name} using variant: {variant.get('image_path', 'No path')}")
                             success, message, outputs = self.generator.generate_3d_from_image(
+                                object_name=object_name,
                                 image_path=variant['image_path'],
-                                output_dir=output_dir
+                                output_dir=output_dir,
+                                image_seed=variant.get('seed', '')
                             )
                             
                             if not success:
@@ -787,8 +816,8 @@ class SceneGeneratorInterface:
                             glb_path_for_preview = update_preview(outputs['glb_path'])
                             
                             # Create display name and new entry for the session models state
-                            variant_seed = variant.get('seed', 'N/A') # Get seed if available
-                            display_name = f"{object_name} - Var {selected_idx + 1} (Seed: {variant_seed})"
+                            variant_seed = variant.get('seed', '') # Get seed if available
+                            display_name = f"{object_name} - (Seed: {variant_seed}) - (Ts: {outputs['timestamp']})"
                             new_model_entry = {'display_name': display_name, 'glb_path': outputs['glb_path']}
 
                             # Update session models state: Upsert based on glb_path
@@ -842,22 +871,20 @@ class SceneGeneratorInterface:
                                 logger.info(f"Batch generating 3D for {object_name} from variant: {variant_details.get('image_path')}")
                                 output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
                                 os.makedirs(output_dir, exist_ok=True)
-                                
+
                                 success, message, outputs = self.generator.generate_3d_from_image(
+                                    object_name=object_name,
                                     image_path=variant_details['image_path'],
-                                    output_dir=output_dir
+                                    output_dir=output_dir,
+                                    image_seed=variant_details.get('seed', '')
                                 )
                                 
                                 if success:
                                     results_log.append(f"Successfully generated 3D for {object_name}")
                                     last_successful_glb_path_for_preview = update_preview(outputs['glb_path'])
                                     
-                                    variant_seed = variant_details.get('seed', 'N/A')
-                                    original_variant_idx = variant_details.get('variant_idx', -1) # Get the stored index
-                                    
-                                    var_num_str = f"{original_variant_idx + 1}" if original_variant_idx != -1 else "Unknown"
-                                    display_name = f"{object_name} - Var {var_num_str} (Seed: {variant_seed})"
-                                                                        
+                                    variant_seed = variant_details.get('seed', '') # Get seed if available
+                                    display_name = f"{object_name} - (Seed: {variant_seed}) - (Ts: {outputs['timestamp']})"                               
                                     new_model_entry = {'display_name': display_name, 'glb_path': outputs['glb_path']}
 
                                     # Upsert logic for this new model entry
@@ -897,7 +924,7 @@ class SceneGeneratorInterface:
                             logger.warning("Invalid selection from session models display or no models available.")
                             # Optionally clear preview or return current values if no valid selection
                             cleared_model_output = clear_preview()
-                            return cleared_model_output, "Invalid selection or no model data."
+                            return cleared_model_output, "Invalid selection or no model data.", None, gr.Button(interactive=False)
 
                         selected_model_data = current_all_session_models[evt.index]
                         glb_path = selected_model_data.get('glb_path')
@@ -906,43 +933,101 @@ class SceneGeneratorInterface:
                         if not glb_path or not os.path.exists(glb_path):
                             logger.error(f"GLB path not found or invalid for selected session model: {glb_path}")
                             cleared_model_output = clear_preview()
-                            return cleared_model_output, f"Error: GLB file not found for {display_name}."
+                            return cleared_model_output, f"Error: GLB file not found for {display_name}.", None, gr.Button(interactive=False)
                         
                         logger.info(f"Loading model from session display: {display_name} (Path: {glb_path})")
                         model_output_val = update_preview(glb_path)
-                        return model_output_val,  f"Displaying: {display_name}"
+                        return model_output_val, f"Displaying: {display_name}", evt.index, gr.Button(interactive=True)
 
-                    # Add confirmation dialog components
-                    with gr.Row(visible=False) as confirm_dialog:
-                        gr.Markdown("⚠️ This process may take several minutes depending on the number and complexity of objects. Do you want to continue?")
-                        with gr.Row():
-                            confirm_btn = gr.Button("Continue")
-                            cancel_btn = gr.Button("Cancel")
+                    def delete_selected_model(selected_idx, current_all_session_models):
+                        """Delete the selected model from the session models."""
+                        logger.info(f"Delete selected model called with index: {selected_idx}")
+                        
+                        if not current_all_session_models or selected_idx is None:
+                            return "No model selected to delete", current_all_session_models, [], None, gr.Button(interactive=False), None
+                        
+                        try:
+                            # Create a copy of the current models list
+                            updated_models = list(current_all_session_models)
+                            deleted_model = updated_models[selected_idx]
+                            # Remove the selected model
+                            del updated_models[selected_idx]
+                            
+                            # Update the dataset display
+                            dataset_display_data = [[item['display_name']] for item in updated_models]
+                            
+                            # Clear the 3D preview
+                            cleared_preview = clear_preview()
+                            
+                            return (
+                                f"Model deleted successfully: {deleted_model.get('display_name', 'Unknown')}", 
+                                updated_models, 
+                                gr.update(samples=dataset_display_data),
+                                None,  # Clear selected index
+                                gr.Button(interactive=False),  # Disable delete button
+                                cleared_preview  # Clear 3D preview
+                            )
+                        except Exception as e:
+                            logger.error(f"Error deleting model: {str(e)}", exc_info=True)
+                            return f"Error deleting model: {str(e)}", current_all_session_models, [], None, gr.Button(interactive=False), None
 
-                    # Add handler for generate all 3D models button
-                    generate_all_3d_btn.click(
-                        fn=lambda: gr.Row(visible=True),
-                        outputs=[confirm_dialog]
+                    def save_session_models(save_path, current_all_session_models):
+                        """Save all session models to the specified folder."""
+                        if not current_all_session_models:
+                            return "No models to save"
+                        
+                        if not save_path:
+                            return "Please provide a scene name"
+                        
+                        try:
+                            # Create the save directory using the scene name
+                            save_dir = os.path.join(SCENE_DIR, save_path)
+                            os.makedirs(save_dir, exist_ok=True)
+                            
+                            saved_models = []
+                            for model in current_all_session_models:
+                                glb_path = model.get('glb_path')
+                                if glb_path and os.path.exists(glb_path):
+                                    # Get the filename from the original path
+                                    filename = os.path.basename(glb_path)
+                                    # Create new path in save directory
+                                    new_path = os.path.join(save_dir, filename)
+                                    # Copy the file
+                                    shutil.copy2(glb_path, new_path)
+                                    saved_models.append(filename)
+                            
+                            if saved_models:
+                                return f"Successfully saved {len(saved_models)} models to {save_dir}"
+                            else:
+                                return "No models were saved"
+                                
+                        except Exception as e:
+                            logger.error(f"Error saving models: {str(e)}")
+                            return f"Error saving models: {str(e)}"
+
+                    # Add handler for save functionality
+                    save_btn.click(
+                        fn=save_session_models,
+                        inputs=[save_folder, all_session_models_state],
+                        outputs=[model_status]
                     )
 
-                    # Handle confirmation
-                    confirm_btn.click(
-                        fn=lambda: (gr.Row(visible=False), gr.Button(interactive=False)),
-                        outputs=[confirm_dialog, generate_all_3d_btn]
+                    
+                    # Add handler for object dropdown to filter variants
+                    object_dropdown.change(
+                        fn=filter_variants_by_object,
+                        inputs=[object_dropdown, all_variants_state],
+                        outputs=[variant_gallery]
                     ).then(
-                        generate_3d_for_all_selected,
-                        inputs=[selected_variants_state, all_session_models_state],
-                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display]
+                        fn=lambda x: x,  # Pass through the selected object
+                        inputs=[object_dropdown],
+                        outputs=[current_object_state]
                     ).then(
-                        fn=lambda: gr.Button(interactive=True),
-                        outputs=[generate_all_3d_btn]
+                        fn=update_prompt_display,
+                        inputs=[object_dropdown],
+                        outputs=[prompt_display]
                     )
 
-                    # Handle cancellation
-                    cancel_btn.click(
-                        fn=lambda: (gr.Row(visible=False), "Generation cancelled by user"),
-                        outputs=[confirm_dialog, model_status]
-                    )
 
                     # Set up event handlers for variant generation
                     generate_btn.click(
@@ -1034,26 +1119,51 @@ class SceneGeneratorInterface:
                         outputs=[model_status, model_output, all_session_models_state, all_generated_models_display, generate_3d_btn]
                     )
 
-                    # Add handler for object dropdown to filter variants
-                    object_dropdown.change(
-                        fn=filter_variants_by_object,
-                        inputs=[object_dropdown, all_variants_state],
-                        outputs=[variant_gallery]
-                    ).then(
-                        fn=lambda x: x,  # Pass through the selected object
-                        inputs=[object_dropdown],
-                        outputs=[current_object_state]
-                    ).then(
-                        fn=update_prompt_display,
-                        inputs=[object_dropdown],
-                        outputs=[prompt_display]
+                    # Add confirmation dialog components
+                    with gr.Row(visible=False) as confirm_dialog:
+                        gr.Markdown("⚠️ This process may take several minutes depending on the number and complexity of objects. Do you want to continue?")
+                        with gr.Row():
+                            confirm_btn = gr.Button("Continue")
+                            cancel_btn = gr.Button("Cancel")
+
+                    # Add handler for generate all 3D models button
+                    generate_all_3d_btn.click(
+                        fn=lambda: gr.Row(visible=True),
+                        outputs=[confirm_dialog]
                     )
 
+                    # Handle confirmation
+                    confirm_btn.click(
+                        fn=lambda: (gr.Row(visible=False), gr.Button(interactive=False)),
+                        outputs=[confirm_dialog, generate_all_3d_btn]
+                    ).then(
+                        generate_3d_for_all_selected,
+                        inputs=[selected_variants_state, all_session_models_state],
+                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display]
+                    ).then(
+                        fn=lambda: gr.Button(interactive=True),
+                        outputs=[generate_all_3d_btn]
+                    )
+
+                    # Handle cancellation
+                    cancel_btn.click(
+                        fn=lambda: (gr.Row(visible=False), "Generation cancelled by user"),
+                        outputs=[confirm_dialog, model_status]
+                    )
+
+                    
                     # Add handler for session model selection
                     all_generated_models_display.select(
                         fn=on_session_model_select,
-                        inputs=[all_session_models_state], # evt: gr.SelectData is implicitly the first arg to fn
-                        outputs=[model_output, model_status]
+                        inputs=[all_session_models_state],
+                        outputs=[model_output, model_status, selected_model_index, delete_selected_btn]
+                    )
+
+                    # Add handler for delete selected button
+                    delete_selected_btn.click(
+                        fn=delete_selected_model,
+                        inputs=[selected_model_index, all_session_models_state],
+                        outputs=[model_status, all_session_models_state, all_generated_models_display, selected_model_index, delete_selected_btn, model_output]
                     )
 
                 # Update object list when the tab is selected
