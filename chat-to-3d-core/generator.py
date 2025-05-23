@@ -415,7 +415,7 @@ class AssetGenerator:
     def initialize_trellis(self):
         """Initialize the TRELLIS image-to-3D model."""
         try:
-            self.trellis_model = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
+            self.trellis_model = TrellisImageTo3DPipeline.from_pretrained('jetx/trellis-image-large')
             self.trellis_model.cuda()
         except Exception as e:
             logger.error(f"Failed to initialize TRELLIS model: {e}")
