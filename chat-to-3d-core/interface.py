@@ -378,6 +378,7 @@ class SceneGeneratorInterface:
                                         samples=[], 
                                         samples_per_page=5,
                                     )
+                                    delete_selected_btn = gr.Button("Delete Selected", variant="secondary", interactive=False)
 
                                     gr.Markdown("#### Save Generated Models")
                                     with gr.Row():
@@ -397,6 +398,9 @@ class SceneGeneratorInterface:
                     all_variants_state = gr.State({})
                     all_session_models_state = gr.State([]) # Step 1.1: New state for all generated models
                     selected_overview_variant = gr.State(None) # New state for tracking selected overview variant
+
+                    # Add state for selected model index
+                    selected_model_index = gr.State(None)
 
                     def update_object_list():
                         """Update the object dropdown with objects from the prompts file."""
@@ -919,7 +923,7 @@ class SceneGeneratorInterface:
                             logger.warning("Invalid selection from session models display or no models available.")
                             # Optionally clear preview or return current values if no valid selection
                             cleared_model_output = clear_preview()
-                            return cleared_model_output, "Invalid selection or no model data."
+                            return cleared_model_output, "Invalid selection or no model data.", None, gr.Button(interactive=False)
 
                         selected_model_data = current_all_session_models[evt.index]
                         glb_path = selected_model_data.get('glb_path')
@@ -928,11 +932,43 @@ class SceneGeneratorInterface:
                         if not glb_path or not os.path.exists(glb_path):
                             logger.error(f"GLB path not found or invalid for selected session model: {glb_path}")
                             cleared_model_output = clear_preview()
-                            return cleared_model_output, f"Error: GLB file not found for {display_name}."
+                            return cleared_model_output, f"Error: GLB file not found for {display_name}.", None, gr.Button(interactive=False)
                         
                         logger.info(f"Loading model from session display: {display_name} (Path: {glb_path})")
                         model_output_val = update_preview(glb_path)
-                        return model_output_val,  f"Displaying: {display_name}"
+                        return model_output_val, f"Displaying: {display_name}", evt.index, gr.Button(interactive=True)
+
+                    def delete_selected_model(selected_idx, current_all_session_models):
+                        """Delete the selected model from the session models."""
+                        logger.info(f"Delete selected model called with index: {selected_idx}")
+                        
+                        if not current_all_session_models or selected_idx is None:
+                            return "No model selected to delete", current_all_session_models, [], None, gr.Button(interactive=False), None
+                        
+                        try:
+                            # Create a copy of the current models list
+                            updated_models = list(current_all_session_models)
+                            deleted_model = updated_models[selected_idx]
+                            # Remove the selected model
+                            del updated_models[selected_idx]
+                            
+                            # Update the dataset display
+                            dataset_display_data = [[item['display_name']] for item in updated_models]
+                            
+                            # Clear the 3D preview
+                            cleared_preview = clear_preview()
+                            
+                            return (
+                                f"Model deleted successfully: {deleted_model.get('display_name', 'Unknown')}", 
+                                updated_models, 
+                                gr.update(samples=dataset_display_data),
+                                None,  # Clear selected index
+                                gr.Button(interactive=False),  # Disable delete button
+                                cleared_preview  # Clear 3D preview
+                            )
+                        except Exception as e:
+                            logger.error(f"Error deleting model: {str(e)}", exc_info=True)
+                            return f"Error deleting model: {str(e)}", current_all_session_models, [], None, gr.Button(interactive=False), None
 
                     def save_session_models(save_path, current_all_session_models):
                         """Save all session models to the specified folder."""
@@ -1118,11 +1154,16 @@ class SceneGeneratorInterface:
                     # Add handler for session model selection
                     all_generated_models_display.select(
                         fn=on_session_model_select,
-                        inputs=[all_session_models_state], # evt: gr.SelectData is implicitly the first arg to fn
-                        outputs=[model_output, model_status]
+                        inputs=[all_session_models_state],
+                        outputs=[model_output, model_status, selected_model_index, delete_selected_btn]
                     )
 
-                    
+                    # Add handler for delete selected button
+                    delete_selected_btn.click(
+                        fn=delete_selected_model,
+                        inputs=[selected_model_index, all_session_models_state],
+                        outputs=[model_status, all_session_models_state, all_generated_models_display, selected_model_index, delete_selected_btn, model_output]
+                    )
 
                 # Update object list when the tab is selected
                 demo.load(fn=update_object_list, outputs=[object_dropdown, generation_status])
