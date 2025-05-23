@@ -15,6 +15,7 @@ from config import (
 import json
 import os
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +301,6 @@ class SceneGeneratorInterface:
                                     lines=2,
                                     interactive=False
                                 )
-
                                               
                         with gr.Column(scale=3):
                             gr.Markdown("### Image Variant Gallery")   
@@ -378,6 +378,15 @@ class SceneGeneratorInterface:
                                         samples=[], 
                                         samples_per_page=5,
                                     )
+
+                                    gr.Markdown("#### Save Generated Models")
+                                    with gr.Row():
+                                        save_folder = gr.Textbox(
+                                            label="Save scene as",
+                                            placeholder="Enter scene name...",
+                                            interactive=True
+                                        )
+                                        save_btn = gr.Button("Save Assets")
 
                     # State components
                     current_object_state = gr.State(None)
@@ -924,6 +933,47 @@ class SceneGeneratorInterface:
                         logger.info(f"Loading model from session display: {display_name} (Path: {glb_path})")
                         model_output_val = update_preview(glb_path)
                         return model_output_val,  f"Displaying: {display_name}"
+
+                    def save_session_models(save_path, current_all_session_models):
+                        """Save all session models to the specified folder."""
+                        if not current_all_session_models:
+                            return "No models to save"
+                        
+                        if not save_path:
+                            return "Please provide a scene name"
+                        
+                        try:
+                            # Create the save directory using the scene name
+                            save_dir = os.path.join(OUTPUT_DIR, save_path)
+                            os.makedirs(save_dir, exist_ok=True)
+                            
+                            saved_models = []
+                            for model in current_all_session_models:
+                                glb_path = model.get('glb_path')
+                                if glb_path and os.path.exists(glb_path):
+                                    # Get the filename from the original path
+                                    filename = os.path.basename(glb_path)
+                                    # Create new path in save directory
+                                    new_path = os.path.join(save_dir, filename)
+                                    # Copy the file
+                                    shutil.copy2(glb_path, new_path)
+                                    saved_models.append(filename)
+                            
+                            if saved_models:
+                                return f"Successfully saved {len(saved_models)} models to {save_dir}"
+                            else:
+                                return "No models were saved"
+                                
+                        except Exception as e:
+                            logger.error(f"Error saving models: {str(e)}")
+                            return f"Error saving models: {str(e)}"
+
+                    # Add handler for save functionality
+                    save_btn.click(
+                        fn=save_session_models,
+                        inputs=[save_folder, all_session_models_state],
+                        outputs=[model_status]
+                    )
 
                     
                     # Add handler for object dropdown to filter variants
