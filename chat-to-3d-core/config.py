@@ -9,10 +9,12 @@ HOME_DIR = Path.home()
 TRELLIS_DIR = HOME_DIR / ".trellis"  # Hidden directory
 ASSETS_DIR = TRELLIS_DIR / "assets"
 PROMPTS_DIR = TRELLIS_DIR / "prompts"
+SCENE_DIR = TRELLIS_DIR / "scene"
 
 # Create directories
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+SCENE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Define file paths
 OUTPUT_DIR = ASSETS_DIR

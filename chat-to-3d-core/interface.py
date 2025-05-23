@@ -8,6 +8,7 @@ from config import (
     DEFAULT_SPARSE_STEPS,
     DEFAULT_SLAT_STEPS,
     OUTPUT_DIR,
+    SCENE_DIR,
     PROMPTS_FILE,
     INITIAL_MESSAGE,
     DEFAULT_TRELLIS_MODEL,
@@ -980,7 +981,7 @@ class SceneGeneratorInterface:
                         
                         try:
                             # Create the save directory using the scene name
-                            save_dir = os.path.join(OUTPUT_DIR, save_path)
+                            save_dir = os.path.join(SCENE_DIR, save_path)
                             os.makedirs(save_dir, exist_ok=True)
                             
                             saved_models = []
