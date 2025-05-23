@@ -1,3 +1,2 @@
-#enforce LF line endings for shell scripts
-*.sh text eol=lf
 *.whl filter=lfs diff=lfs merge=lfs -text
+*.sh text eol=lf
