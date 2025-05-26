@@ -403,6 +403,9 @@ class SceneGeneratorInterface:
                     # Add state for selected model index
                     selected_model_index = gr.State(None)
 
+                    # Add state for gallery items
+                    gallery_items_state = gr.State([])
+
                     def update_object_list():
                         """Update the object dropdown with objects from the prompts file."""
                         try:
@@ -651,7 +654,7 @@ class SceneGeneratorInterface:
                                 gr.Button(interactive=True),  # select_variant_btn
                                 selected_variant['image_path'],  # current_variant_image
                                 evt.index,  # selected_variant_index
-                                gr.Button(interactive=False)  # generate_3d_btn
+                                gr.Button(interactive=False),  # generate_3d_btn
                             )
                         return gr.Button(interactive=False), None, None, gr.Button(interactive=False)
 
@@ -659,13 +662,13 @@ class SceneGeneratorInterface:
                         """Handle variant selection."""
                         logger.info(f"Selecting variant with index: {selected_idx}")
                         if not object_name or not all_variants_state or object_name not in all_variants_state:
-                            return gr.update(value="No variants available to select"), []
+                            return gr.update(value="No variants available to select"), [], None
                         
                         if selected_idx is None:
-                            return gr.update(value="Please select a variant from the gallery first"), []
+                            return gr.update(value="Please select a variant from the gallery first"), [], None
                         
                         if selected_idx >= len(all_variants_state[object_name]):
-                            return gr.update(value="Invalid variant selection"), []
+                            return gr.update(value="Invalid variant selection"), [], None
                         
                         # Get the selected variant from all_variants_state and add its original index
                         selected_variant_details = dict(all_variants_state[object_name][selected_idx]) # Make a copy
@@ -681,10 +684,8 @@ class SceneGeneratorInterface:
                             (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
                             for obj_name, v in selected_variants.items()
                         ]
-
-                        # gallery_items = build_image_variant_name(object_name, selected_variants)
                         
-                        return gr.update(value=f"Selected variant for {object_name}"), gallery_items
+                        return gr.update(value=f"Selected variant for {object_name}"), gallery_items, selected_variant_details
 
                     def on_overview_variant_select(evt: gr.SelectData, selected_variants):
                         """Handle selection of a variant from the overview gallery."""
@@ -721,7 +722,7 @@ class SceneGeneratorInterface:
                         logger.info("Clearing selected variant")
                         
                         if not selected_overview_variant:
-                            return None, gr.Button(interactive=False), gr.Button(interactive=False), "No variant selected to clear", selected_variants, []
+                            return None, gr.Button(interactive=False), gr.Button(interactive=False), "No variant selected to clear", selected_variants, [], []
                         
                         # Get the image path of the selected variant
                         selected_image_path = selected_overview_variant.get('image_path', '')
@@ -742,16 +743,17 @@ class SceneGeneratorInterface:
                         gallery_items = [
                             (v['image_path'], f"{obj_name} (Seed: {v['seed']})")
                              for obj_name, v in updated_selected_variants.items()
-                         ]
-                       
+                        ]
                         
+                        # First return empty gallery to force deselection
                         return (
                             None,  # Clear selected overview variant
                             gr.Button(interactive=False),  # Disable generate button
                             gr.Button(interactive=False),  # Disable clear selection button
                             f"Cleared selection for {selected_filename}",  # Status message
                             updated_selected_variants,  # Updated selected variants state
-                            gallery_items  # Updated gallery items
+                            [],  # Return empty gallery items
+                            gallery_items  # Store gallery items for second step
                         )
 
                     def generate_3d_model(object_name, all_variants_state, selected_idx, current_all_session_models, selected_overview_variant):
@@ -1063,7 +1065,7 @@ class SceneGeneratorInterface:
                     variant_gallery.select(
                         fn=on_variant_select,
                         inputs=[current_object_state, all_variants_state],
-                        outputs=[select_variant_btn, current_variant_image, selected_variant_index, gr.Button(interactive=False)]  # Always disable generate_3d_btn
+                        outputs=[select_variant_btn, current_variant_image, selected_variant_index, gr.Button(interactive=False)]
                     )
 
                     # Handle variant selection
@@ -1076,7 +1078,7 @@ class SceneGeneratorInterface:
                             selected_variant_index,
                             all_variants_state
                         ],
-                        outputs=[generation_status, selected_variants_gallery]
+                        outputs=[generation_status, selected_variants_gallery, selected_overview_variant]
                     ).then(
                         fn=lambda: gr.Button(interactive=True),
                         outputs=[generate_all_3d_btn]
@@ -1099,8 +1101,14 @@ class SceneGeneratorInterface:
                             clear_selection_btn,
                             model_status,
                             selected_variants_state,
-                            selected_variants_gallery
+                            selected_variants_gallery,
+                            gallery_items_state  # Store gallery items for second step
                         ]
+                    ).then(
+                        # Second step: Update with actual gallery items
+                        fn=lambda x: gr.update(value=x),
+                        inputs=[gallery_items_state],
+                        outputs=[selected_variants_gallery]
                     )
 
                     # Update generate_3d_btn click handler to include selected_overview_variant
