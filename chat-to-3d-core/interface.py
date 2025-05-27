@@ -28,6 +28,8 @@ class SceneGeneratorInterface:
         self.INITIAL_MESSAGE = INITIAL_MESSAGE
         # Delete existing prompts file if it exists
         delete_prompts_file()
+        # Add global cancellation flag
+        self.batch_generation_cancelled = False
 
     def parse_object_list(self, response):
         """Parse the LLM response to extract suggested objects from numbered lists.
@@ -399,6 +401,7 @@ class SceneGeneratorInterface:
                     all_variants_state = gr.State({})
                     all_session_models_state = gr.State([]) # Step 1.1: New state for all generated models
                     selected_overview_variant = gr.State(None) # New state for tracking selected overview variant
+                    batch_generation_cancelled = gr.State(False) # New state for tracking batch generation cancellation
 
                     # Add state for selected model index
                     selected_model_index = gr.State(None)
@@ -854,22 +857,43 @@ class SceneGeneratorInterface:
                             current_dataset_display_data = [[item['display_name']] for item in current_all_session_models]
                             return error_msg, cleared_glb_path, current_all_session_models, gr.update(samples=current_dataset_display_data), gr.Button(interactive=True)
 
-                    def generate_3d_for_all_selected(selected_variants, current_all_session_models):
+                    def on_cancel_batch():
+                        logger.info("Cancel batch generation button clicked")
+                        logger.info("Setting batch_generation_cancelled to True")
+                        self.batch_generation_cancelled = True
+                        gr.Info("Batch generation will be cancelled after the current 3D asset is created. Please wait...")
+                        return (
+                            True,  # batch_generation_cancelled
+                            "Cancelling after current object completes...",  # model_status
+                            gr.Row(visible=False)  # batch_cancel_row
+                        )
+
+                    def generate_3d_for_all_selected(selected_variants, current_all_session_models, batch_generation_cancelled):
                         """Generate 3D models for all selected variants."""
+                        # Reset cancellation flag at start
+                        self.batch_generation_cancelled = False
+                        logger.info(f"Starting batch generation. Initial cancellation state: {self.batch_generation_cancelled}")
+                        
                         if not selected_variants:
-                            # Ensure all_session_models_display is updated with its current state
                             dataset_display_data = [[item['display_name']] for item in current_all_session_models] if current_all_session_models else []
-                            return "No variants selected", None, current_all_session_models, dataset_display_data
+                            return "No variants selected", None, current_all_session_models, dataset_display_data, gr.Button(interactive=True), gr.Row(visible=False)
                         
                         if current_all_session_models is None:
-                            current_all_session_models = [] # Initialize if None
+                            current_all_session_models = []
 
-                        updated_all_session_models = list(current_all_session_models) # Make a copy to modify throughout the loop
+                        updated_all_session_models = list(current_all_session_models)
                         results_log = []
                         last_successful_glb_path_for_preview = None
 
                         try:
                             for object_name, variant_details in selected_variants.items():
+                                # Check cancellation state at the start of each object
+                                logger.info(f"Starting {object_name}. Current cancellation state: {self.batch_generation_cancelled}")
+                                if self.batch_generation_cancelled:
+                                    logger.info("Generation cancelled detected in loop")
+                                    results_log.append("Generation cancelled by user")
+                                    break
+
                                 logger.info(f"Batch generating 3D for {object_name} from variant: {variant_details.get('image_path')}")
                                 output_dir = os.path.join(OUTPUT_DIR, object_name, "3d_assets")
                                 os.makedirs(output_dir, exist_ok=True)
@@ -885,7 +909,7 @@ class SceneGeneratorInterface:
                                     results_log.append(f"Successfully generated 3D for {object_name}")
                                     last_successful_glb_path_for_preview = update_preview(outputs['glb_path'])
                                     
-                                    variant_seed = variant_details.get('seed', '') # Get seed if available
+                                    variant_seed = variant_details.get('seed', '')
                                     display_name = f"{object_name} - (Seed: {variant_seed}) - (Ts: {outputs['timestamp']})"                               
                                     new_model_entry = {'display_name': display_name, 'glb_path': outputs['glb_path']}
 
@@ -911,14 +935,16 @@ class SceneGeneratorInterface:
                                 final_status_message,
                                 last_successful_glb_path_for_preview, 
                                 updated_all_session_models,
-                                gr.update(samples=final_dataset_display_data)
+                                gr.update(samples=final_dataset_display_data),
+                                gr.Button(interactive=True),  # Re-enable generate button
+                                gr.Row(visible=False)  # Hide cancel button
                             )
                             
                         except Exception as e:
                             logger.error(f"Error during batch 3D generation: {str(e)}", exc_info=True)
                             error_msg = f"Error during batch 3D generation: {str(e)}"
                             current_dataset_display_data = [[item['display_name']] for item in updated_all_session_models] # Use potentially partially updated list
-                            return error_msg, None, updated_all_session_models, gr.update(samples=current_dataset_display_data)
+                            return error_msg, None, updated_all_session_models, gr.update(samples=current_dataset_display_data), gr.Button(interactive=True), gr.Row(visible=False)
 
                     def on_session_model_select(evt: gr.SelectData, current_all_session_models):
                         """Handles selection of a model from the all_generated_models_display Dataset."""
@@ -1134,6 +1160,10 @@ class SceneGeneratorInterface:
                             confirm_btn = gr.Button("Continue")
                             cancel_btn = gr.Button("Cancel")
 
+                    # Add cancel button for batch generation
+                    with gr.Row(visible=False) as batch_cancel_row:
+                        cancel_batch_btn = gr.Button("Cancel Batch Generation", variant="stop")
+
                     # Add handler for generate all 3D models button
                     generate_all_3d_btn.click(
                         fn=lambda: gr.Row(visible=True),
@@ -1142,21 +1172,24 @@ class SceneGeneratorInterface:
 
                     # Handle confirmation
                     confirm_btn.click(
-                        fn=lambda: (gr.Row(visible=False), gr.Button(interactive=False)),
-                        outputs=[confirm_dialog, generate_all_3d_btn]
+                        fn=lambda: (gr.Row(visible=False), gr.Button(interactive=False), gr.Row(visible=True), False),
+                        outputs=[confirm_dialog, generate_all_3d_btn, batch_cancel_row, batch_generation_cancelled]
                     ).then(
                         generate_3d_for_all_selected,
-                        inputs=[selected_variants_state, all_session_models_state],
-                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display]
-                    ).then(
-                        fn=lambda: gr.Button(interactive=True),
-                        outputs=[generate_all_3d_btn]
+                        inputs=[selected_variants_state, all_session_models_state, batch_generation_cancelled],
+                        outputs=[model_status, model_output, all_session_models_state, all_generated_models_display, generate_all_3d_btn, batch_cancel_row]
                     )
 
                     # Handle cancellation
                     cancel_btn.click(
                         fn=lambda: (gr.Row(visible=False), "Generation cancelled by user"),
                         outputs=[confirm_dialog, model_status]
+                    )
+
+                    # Handle batch cancellation
+                    cancel_batch_btn.click(
+                        fn=on_cancel_batch,
+                        outputs=[batch_generation_cancelled, model_status, batch_cancel_row]
                     )
 
                     
