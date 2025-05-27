@@ -268,8 +268,15 @@ class SceneGeneratorInterface:
                                     interactive=True,
                                 )
                                 
-                                prompt_display = gr.Textbox(
-                                    label="Generation Prompt",
+                                original_prompt_display = gr.Textbox(
+                                    label="Original Prompt",
+                                    lines=4,
+                                    interactive=False,
+                                    value="",
+                                )
+
+                                edited_prompt_display = gr.Textbox(
+                                    label="Edited Prompt",
                                     lines=4,
                                     interactive=True,
                                     value="",
@@ -399,9 +406,10 @@ class SceneGeneratorInterface:
                     current_variant_image = gr.State(None)
                     selected_variant_index = gr.State(None)
                     all_variants_state = gr.State({})
-                    all_session_models_state = gr.State([]) # Step 1.1: New state for all generated models
-                    selected_overview_variant = gr.State(None) # New state for tracking selected overview variant
-                    batch_generation_cancelled = gr.State(False) # New state for tracking batch generation cancellation
+                    all_session_models_state = gr.State([])
+                    selected_overview_variant = gr.State(None)
+                    batch_generation_cancelled = gr.State(False)
+                    edited_prompts_state = gr.State({})  # New state to track edited prompts for each object
 
                     # Add state for selected model index
                     selected_model_index = gr.State(None)
@@ -473,7 +481,7 @@ class SceneGeneratorInterface:
                             ]
                         return gallery_items
                         
-                    def generate_variants_for_object(object_name, seed, num_variants, prompt_display, all_variants_state):
+                    def generate_variants_for_object(object_name, seed, num_variants, edited_prompt_display, all_variants_state):
                         """Generate variants for a single object."""
                         try:
                             if not object_name:
@@ -489,7 +497,7 @@ class SceneGeneratorInterface:
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
                                     if obj['name'] == object_name:
-                                        object_prompt = prompt_display if prompt_display else obj['prompt']
+                                        object_prompt = edited_prompt_display if edited_prompt_display else obj['prompt']
                                         break
                                 if object_prompt:
                                     break
@@ -530,7 +538,7 @@ class SceneGeneratorInterface:
                         except Exception as e:
                             return f"Error during generation: {str(e)}", None, [], all_variants_state
 
-                    def generate_variants_for_all_objects(seed, num_variants, prompt_display):
+                    def generate_variants_for_all_objects(seed, num_variants, edited_prompt_display, edited_prompts_state):
                         """Generate variants for all objects in the prompts file."""
                         try:
                             if not os.path.exists(PROMPTS_FILE):
@@ -548,8 +556,8 @@ class SceneGeneratorInterface:
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
                                     object_name = obj['name']
-                                    # Use edited prompt only for the currently selected object
-                                    object_prompt = prompt_display if object_name == current_object else obj['prompt']
+                                    # Use edited prompt from state if it exists, otherwise use original prompt
+                                    object_prompt = edited_prompts_state.get(object_name, obj['prompt'])
                                     
                                     # Create output directory for this object
                                     object_dir = os.path.join(OUTPUT_DIR, object_name)
@@ -611,24 +619,41 @@ class SceneGeneratorInterface:
                         logger.warning(f"No variants found for {selected_object}")
                         return []
 
-                    def update_prompt_display(selected_object):
+                    def update_prompt_display(selected_object, edited_prompts):
                         """Update the prompt display when an object is selected."""
                         try:
                             if not selected_object or not os.path.exists(PROMPTS_FILE):
-                                return ""
+                                return "", ""
                             
                             with open(PROMPTS_FILE, 'r') as f:
                                 data = json.load(f)
                             
+                            original_prompt = ""
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
                                     if obj['name'] == selected_object:
-                                        return obj['prompt']
-                            
-                            return ""
+                                        original_prompt = obj['prompt']
+                                        break
+                                if original_prompt:
+                                    break
+            
+                            # Get the edited prompt from state if it exists, otherwise use original
+                            edited_prompt = edited_prompts.get(selected_object, original_prompt)
+                            return original_prompt, edited_prompt
                         except Exception as e:
                             logger.error(f"Error updating prompt display: {e}")
-                            return ""
+                            return "", ""
+
+                    def update_edited_prompt(edited_prompt, selected_object, edited_prompts):
+                        """Update the edited prompt for the current object."""
+                        if not selected_object:
+                            return edited_prompts
+                        
+                        # Create a copy of the current edited prompts
+                        updated_prompts = dict(edited_prompts) if edited_prompts else {}
+                        # Update the prompt for the current object
+                        updated_prompts[selected_object] = edited_prompt
+                        return updated_prompts
 
                     def clear_model_preview_on_object_change():
                         """Clears the 3D model preview and associated status when the object dropdown changes."""
@@ -1052,10 +1077,16 @@ class SceneGeneratorInterface:
                         outputs=[current_object_state]
                     ).then(
                         fn=update_prompt_display,
-                        inputs=[object_dropdown],
-                        outputs=[prompt_display]
+                        inputs=[object_dropdown, edited_prompts_state],
+                        outputs=[original_prompt_display, edited_prompt_display]
                     )
 
+                    # Add handler for edited prompt changes
+                    edited_prompt_display.change(
+                        fn=update_edited_prompt,
+                        inputs=[edited_prompt_display, current_object_state, edited_prompts_state],
+                        outputs=[edited_prompts_state]
+                    )
 
                     # Set up event handlers for variant generation
                     generate_btn.click(
@@ -1064,7 +1095,7 @@ class SceneGeneratorInterface:
                             object_dropdown,
                             seed,
                             num_variants,
-                            prompt_display,
+                            edited_prompt_display,  # Use edited prompt instead of original
                             all_variants_state
                         ],
                         outputs=[
@@ -1078,7 +1109,7 @@ class SceneGeneratorInterface:
                     # Add handler for generate all variants button
                     generate_all_btn.click(
                         fn=generate_variants_for_all_objects,
-                        inputs=[seed, num_variants, prompt_display],
+                        inputs=[seed, num_variants, edited_prompt_display, edited_prompts_state],
                         outputs=[
                             generation_status,
                             object_dropdown,
