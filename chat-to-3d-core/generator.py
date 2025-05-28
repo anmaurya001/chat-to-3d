@@ -8,7 +8,6 @@ import os
 import numpy as np
 import torch
 import gc
-from pathlib import Path
 from typing import Tuple
 from trellis.pipelines import TrellisTextTo3DPipeline, TrellisImageTo3DPipeline
 from trellis.utils import postprocessing_utils, render_utils
@@ -48,7 +47,7 @@ class AssetGenerator:
         
         # Load the default model during initialization
         #self.load_model(default_model)
-        self.load_sana_model()
+        #self.load_sana_model()
         self.initialize_trellis()
     
     def start_termination_server(self):
@@ -108,6 +107,35 @@ class AssetGenerator:
             except Exception as e:
                 logger.error(f"Error during cleanup: {e}")
 
+
+    def cleanup_sana_pipeline(self):
+        """Clean up the current model"""
+        if self.sana_pipeline is not None:
+            try:
+                # Move to CPU first
+                if hasattr(self.sana_pipeline, 'cuda'):
+                    self.sana_pipeline.cpu()
+
+                # Clear internal tensors if any
+                if hasattr(self.sana_pipeline, '__dict__'):
+                    for k, v in list(vars(self.sana_pipeline).items()):
+                        if torch.is_tensor(v):
+                            setattr(self.sana_pipeline, k, None)
+                            del v
+                # Delete the model reference
+                del self.sana_pipeline
+                self.sana_pipeline = None
+
+                # Force garbage collection
+                gc.collect()
+
+                # Empty unused memory from GPU cache
+                torch.cuda.empty_cache()
+                logger.info("Successfully cleaned up SANA pipeline")
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
+
+
     def load_model(self, model_name):
         """Load a specific TRELLIS model"""
         try:
@@ -134,13 +162,16 @@ class AssetGenerator:
     def load_sana_model(self):
         """Load the SANA model for image generation."""
         try:
+            start_time = datetime.datetime.now()
             logger.info("Loading SANA model...")
             self.sana_pipeline = SanaSprintPipeline.from_pretrained(
                 "Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
                 torch_dtype=torch.bfloat16
             )
             self.sana_pipeline.to("cuda:0")
-            logger.info("Successfully loaded SANA model")
+            end_time = datetime.datetime.now()
+            load_time = (end_time - start_time).total_seconds()
+            logger.info(f"Successfully loaded SANA model in {load_time:.2f} seconds")
             return True
         except Exception as e:
             logger.error(f"Error loading SANA model: {e}")
@@ -195,6 +226,7 @@ class AssetGenerator:
         """Generate multiple image variants using SANA model."""
         try:
             if self.sana_pipeline is None:
+                logger.info("SANA model not loaded, loading now...")
                 if not self.load_sana_model():
                     return False, "Failed to load SANA model", []
 
@@ -412,8 +444,13 @@ class AssetGenerator:
     def initialize_trellis(self):
         """Initialize the TRELLIS image-to-3D model."""
         try:
+            start_time = datetime.datetime.now()
+            logger.info("Initializing TRELLIS model...")
             self.trellis_model = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
             self.trellis_model.cuda()
+            end_time = datetime.datetime.now()
+            load_time = (end_time - start_time).total_seconds()
+            logger.info(f"Successfully initialized TRELLIS model in {load_time:.2f} seconds")
         except Exception as e:
             logger.error(f"Failed to initialize TRELLIS model: {e}")
             raise
@@ -491,6 +528,12 @@ class AssetGenerator:
     def generate_3d_from_image(self, object_name, image_path, output_dir,image_seed, seed=0):
         """Generate a 3D model from an image using TRELLIS."""
         try:
+            #Cleanup the SANA pipeline      
+            if self.sana_pipeline is not None:
+                logger.info("Cleaning up SANA pipeline")
+                self.cleanup_sana_pipeline()
+            else:
+                logger.info("SANA pipeline not loaded, skipping cleanup")
             formatted_object_name = object_name.lower().replace(" ", "_")
             logger.info(f"Starting 3D generation from image: {image_path} for object: {formatted_object_name}")
             
