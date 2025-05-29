@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+import requests
 from griptape.structures import Agent
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from griptape.memory.structure import ConversationMemory
@@ -17,6 +18,7 @@ class ScenePlanningAgent:
         self.memory = ConversationMemory()
         self.agent = self._initialize_agent()
         self.is_generating_prompts = False
+        self.health_check_url = f"{AGENT_BASE_URL}/health/ready"
 
     def _get_planning_rules(self):
         """Get rules for scene planning phase."""
@@ -185,9 +187,24 @@ class ScenePlanningAgent:
         agent.memory = self.memory
         return agent
 
+    def check_agent_health(self):
+        """Check if the LLM agent is up and running."""
+        try:
+            logger.info(f"Checking agent health at: {self.health_check_url}")
+            response = requests.get(self.health_check_url, timeout=2)
+            logger.info(f"Agent health check response: {response.status_code}")
+            return response.status_code == 200
+        except requests.RequestException as e:
+            logger.error(f"Health check failed: {e}")
+            return False
+
     def chat(self, message, current_objects=None):
         """Handle chat messages and provide scene planning assistance."""
         try:
+            # Check agent health before proceeding
+            if not self.check_agent_health():
+                return "Error: LLM agent is currently unavailable. Please try again later."
+
             # Always ensure we're in planning mode
             if self.is_generating_prompts:
                 self.agent.rules = self._get_planning_rules()
@@ -237,6 +254,10 @@ class ScenePlanningAgent:
     def generate_3d_prompts(self, scene_name, initial_description):
         """Generate 3D prompts for each object in the final scene."""
         try:
+            # Check agent health before proceeding
+            if not self.check_agent_health():
+                return False, None, "Error: LLM agent is currently unavailable. Please try again later."
+
             logger.info("Switching to prompt generation mode")
             # Switch to prompt generation mode
             self.agent.rules = self._get_prompt_generation_rules()
