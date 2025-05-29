@@ -192,7 +192,7 @@ class AssetGenerator:
         try:
             # Run the command
             result = subprocess.run(
-                ["wsl", "--shutdown"],
+                ["wsl", "podman", "stop", "CHAT_TO_3D"],
                 capture_output=True,
                 text=True,
                 timeout=15
