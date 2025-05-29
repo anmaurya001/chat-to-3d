@@ -70,6 +70,7 @@ class SceneGeneratorInterface:
                 
         return objects
 
+    
     def create_interface(self):
         """Create the Gradio interface for the 3D Scene Generator."""
         with gr.Blocks() as demo:
@@ -90,6 +91,17 @@ class SceneGeneratorInterface:
                                           "<p style='margin: 0; color: #6c757d;'>Checking LLM Agent Status...</p>"
                                           "</div>"
                                 )
+                                start_agent_btn = gr.Button(
+                                    "Start LLM Agent",
+                                    size="sm",
+                                    variant="primary"
+                                )
+                                check_status_btn = gr.Button(
+                                    "Check Status",
+                                    size="sm",
+                                    variant="secondary"
+                                )
+                                
                                 # Add hidden state to track tab selection
                                 tab_selected = gr.State(value=False)
 
@@ -180,6 +192,35 @@ class SceneGeneratorInterface:
                                 gr.update(interactive=False),  # generate prompts button
                                 gr.update(interactive=False)   # clear button
                             )
+                            
+                    def start_llm_agent():
+                        """Check LLM status and attempt to start if down."""
+                        # First check current status
+                        is_healthy = self.agent.check_agent_health()
+                        if is_healthy:
+                            # If already healthy, just return current status
+                            return check_agent_status()
+
+                        # If not healthy, try to start the agent
+                        logger.info("Attempting to start LLM agent...")
+                        try:
+                            # TODO: Add actual agent start logic here
+                            # For now, just log the attempt
+                            logger.info("LLM agent start requested")
+
+                            # Check status again after attempted start
+                            is_healthy = self.agent.check_agent_health()
+                            if is_healthy:
+                                logger.info("LLM agent started successfully")
+                            else:
+                                logger.warning("LLM agent failed to start")
+
+                            # Return updated status
+                            return check_agent_status()
+
+                        except Exception as e:
+                            logger.error(f"Error starting LLM agent: {e}")
+                            return check_agent_status()
 
                     def clear_chat():
                         """Clear the chat and reset object lists."""
@@ -1340,6 +1381,30 @@ class SceneGeneratorInterface:
                         clear_btn  # clear button
                     ]
                 )
+
+                # Add handler for manual status check button
+                check_status_btn.click(
+                    fn=check_agent_status,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+
+                start_agent_btn.click(
+                    fn=start_llm_agent,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+                
 
                 # Set up event handlers for chat and prompt generation
                 clear_btn.click(
