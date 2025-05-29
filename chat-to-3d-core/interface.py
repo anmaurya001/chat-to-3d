@@ -94,16 +94,15 @@ class SceneGeneratorInterface:
                                 start_agent_btn = gr.Button(
                                     "Start LLM Agent",
                                     size="sm",
-                                    variant="primary"
+                                    variant="primary",
+                                    visible=False
                                 )
-                                check_status_btn = gr.Button(
-                                    "Check Status",
+                                refresh_status_btn = gr.Button(
+                                    "Refresh Status",
                                     size="sm",
                                     variant="secondary"
                                 )
                                 
-                                # Add hidden state to track tab selection
-                                tab_selected = gr.State(value=False)
 
                             chatbot = gr.Chatbot(
                                 height=400, value=[(None, self.INITIAL_MESSAGE)]
@@ -181,7 +180,7 @@ class SceneGeneratorInterface:
                         else:
                             status_html = (
                                 "<div style='background-color: #f8d7da; padding: 10px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
-                                "<p style='margin: 0; color: #721c24;'>✗ LLM Agent is offline or unavailable</p>"
+                                "<p style='margin: 0; color: #721c24;'>✗ LLM Agent is offline or unavailable. Please start the agent manually.</p>"
                                 "</div>"
                             )
                             # Disable UI elements when agent is unhealthy
@@ -250,7 +249,7 @@ class SceneGeneratorInterface:
                         """Handle chat response and update suggested objects."""
                         # Check agent status first
                         if not self.agent.check_agent_health():
-                            chat_history.append((message, "Error: LLM agent is currently unavailable. Please try again later."))
+                            chat_history.append((message, "Error: LLM agent is currently unavailable. Please refresh status."))
                             return chat_history, "", gr.update(choices=[]), accepted, gr.update(
                                 value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
                                       "<p style='margin: 0; color: #6c757d;'>No objects accepted yet</p>"
@@ -303,7 +302,7 @@ class SceneGeneratorInterface:
                         if not self.agent.check_agent_health():
                             return gr.update(
                                 value="<div style='background-color: #f8d7da; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
-                                      "<p style='margin: 0; color: #721c24;'>Error: LLM agent is currently unavailable. Please try again later.</p>"
+                                      "<p style='margin: 0; color: #721c24;'>Error: LLM agent is currently unavailable. Please refresh status.</p>"
                                       "</div>"
                             ), "", gr.update(choices=[], value=None, interactive=False), "LLM Agent is offline"
 
@@ -651,8 +650,6 @@ class SceneGeneratorInterface:
                             
                             all_variants = {}
                             
-                            # Get the current selected object
-                            current_object = object_dropdown.value
                             
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
@@ -1383,7 +1380,7 @@ class SceneGeneratorInterface:
                 )
 
                 # Add handler for manual status check button
-                check_status_btn.click(
+                refresh_status_btn.click(
                     fn=check_agent_status,
                     outputs=[
                         agent_status,
