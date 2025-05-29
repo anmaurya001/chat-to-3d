@@ -12,6 +12,7 @@ from config import (
     PROMPTS_FILE,
     INITIAL_MESSAGE,
     DEFAULT_TRELLIS_MODEL,
+    VRAM_THRESHOLD,
 )
 import json
 import os
@@ -181,6 +182,7 @@ class SceneGeneratorInterface:
                             status_html = (
                                 "<div style='background-color: #f8d7da; padding: 10px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
                                 "<p style='margin: 0; color: #721c24;'>✗ LLM Agent is offline or unavailable. Please start the agent manually.</p>"
+                                "<p style='margin: 5px 0 0 0; color: #721c24;'>Follow the instructions at: <a href='https://github.com/anmaurya001/chat-to-3d/tree/main?tab=readme-ov-file#method-2-manual-installation-1' target='_blank'>LLM Agent NIM Startup Guide</a></p>"
                                 "</div>"
                             )
                             # Disable UI elements when agent is unhealthy
@@ -1366,6 +1368,10 @@ class SceneGeneratorInterface:
 
                 # Add immediate status check when chat tab is selected
                 def on_tab_select():
+                    #clean SANA pipeline
+                    if self.generator.sana_pipeline and self.generator.is_llm_shutdown_required(vram_threshold=VRAM_THRESHOLD):
+                        logger.info("Cleaning up SANA pipeline")
+                        self.generator.cleanup_sana_pipeline()
                     return check_agent_status()
 
                 tabs.select(

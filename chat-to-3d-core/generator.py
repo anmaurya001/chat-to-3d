@@ -14,6 +14,7 @@ from trellis.utils import postprocessing_utils, render_utils
 from easydict import EasyDict as edict
 from diffusers import SanaSprintPipeline
 import imageio
+import subprocess
 from config import (
     SPCONV_ALGO,
     DEFAULT_SEED,
@@ -25,6 +26,7 @@ from config import (
     LOG_FORMAT,
     TRELLIS_MODEL_NAME_MAP,
     DEFAULT_TRELLIS_MODEL,
+    VRAM_THRESHOLD,
 )
 from trellis.representations import Gaussian, MeshExtractResult
 from PIL import Image
@@ -158,10 +160,80 @@ class AssetGenerator:
         except Exception as e:
             logger.error(f"Error loading model {model_name}: {e}")
             return False
+        
+    def check_gpu_vram_capacity(self, vram_threshold=16):
+        """Check if the GPU has vram_threshold or less VRAM capacity."""
+        try:
+            if not torch.cuda.is_available():
+                logger.warning("No CUDA-capable GPU found")
+                return False
+                
+            # Get total VRAM capacity in bytes
+            total_vram = torch.cuda.get_device_properties(0).total_memory
+            # Convert to GB
+            total_vram_gb = total_vram / (1024**3)
+            
+            logger.info(f"Total GPU VRAM: {total_vram_gb:.2f} GB")
+            logger.info(f"VRAM threshold: {vram_threshold} GB")
+            logger.info(f"VRAM check result: {total_vram_gb <= vram_threshold}")
+            
+            # Return True if VRAM is vram_threshold or less
+            return total_vram_gb <= vram_threshold
+        except Exception as e:
+            logger.error(f"Error checking GPU VRAM capacity: {e}")
+            return False
+        
+    def is_llm_shutdown_required(self, vram_threshold=VRAM_THRESHOLD):
+        """Check if the LLM Agent should be shutdown based on GPU VRAM capacity."""
+        return self.check_gpu_vram_capacity(vram_threshold)
+
+    def stop_llm_agent(self):
+        """Stop the LLM Agent if GPU VRAM capacity is vram_threshold or less."""
+        try:
+            # Run the command
+            result = subprocess.run(
+                ["wsl", "--shutdown"],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            
+            # Check the result
+            if result.returncode == 0:
+                # Force garbage collection
+                gc.collect()
+
+                # Empty unused memory from GPU cache
+                torch.cuda.empty_cache()
+                logger.info("Successfully stopped LLM Agent container: %s", result.stdout.strip())
+                return True
+            else:
+                logger.error("Failed to stop LLM Agent container: %s", result.stderr.strip())
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error("Command 'wsl podman stop LLM_AGENT' timed out after 30 seconds")
+            return False
+        except subprocess.SubprocessError as e:
+            logger.error("Error running 'wsl podman stop LLM_AGENT': %s", str(e))
+            return False
+        except FileNotFoundError:
+            logger.error("WSL or podman not found. Ensure WSL and podman are installed and accessible")
+            return False
 
     def load_sana_model(self):
         """Load the SANA model for image generation."""
         try:
+            #Check if the LLM Agent should be shutdown
+            if self.is_llm_shutdown_required(vram_threshold=VRAM_THRESHOLD):
+                logger.info("Stopping LLM Agent")
+                #Error handling
+                if not self.stop_llm_agent():
+                    logger.error("Failed to stop LLM Agent")
+                    return False
+            else:
+                logger.info("LLM Agent is not required to be shutdown")
+
             start_time = datetime.datetime.now()
             logger.info("Loading SANA model...")
             self.sana_pipeline = SanaSprintPipeline.from_pretrained(

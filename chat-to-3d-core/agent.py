@@ -203,7 +203,7 @@ class ScenePlanningAgent:
         try:
             # Check agent health before proceeding
             if not self.check_agent_health():
-                return "Error: LLM agent is currently unavailable. Please try again later."
+                return "Error: LLM agent is currently unavailable. Please refresh status."
 
             # Always ensure we're in planning mode
             if self.is_generating_prompts:
@@ -256,7 +256,7 @@ class ScenePlanningAgent:
         try:
             # Check agent health before proceeding
             if not self.check_agent_health():
-                return False, None, "Error: LLM agent is currently unavailable. Please try again later."
+                return False, None, "Error: LLM agent is currently unavailable. Please refresh status."
 
             logger.info("Switching to prompt generation mode")
             # Switch to prompt generation mode

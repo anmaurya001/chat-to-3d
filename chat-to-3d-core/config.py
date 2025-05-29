@@ -21,6 +21,7 @@ OUTPUT_DIR = ASSETS_DIR
 PROMPTS_FILE = PROMPTS_DIR / "prompts.json"
 
 # Other configuration settings
+VRAM_THRESHOLD = 16  # VRAM threshold in GB for stopping the LLM Agent
 DEFAULT_SEED = 42
 DEFAULT_SPARSE_STEPS = 25
 DEFAULT_SLAT_STEPS = 25
