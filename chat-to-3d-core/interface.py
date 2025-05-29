@@ -12,6 +12,7 @@ from config import (
     PROMPTS_FILE,
     INITIAL_MESSAGE,
     DEFAULT_TRELLIS_MODEL,
+    VRAM_THRESHOLD,
 )
 import json
 import os
@@ -70,18 +71,40 @@ class SceneGeneratorInterface:
                 
         return objects
 
+    
     def create_interface(self):
         """Create the Gradio interface for the 3D Scene Generator."""
         with gr.Blocks() as demo:
             gr.Markdown("# 3D Scene Generator")
 
-            with gr.Tabs():
-                with gr.TabItem("Chat & Generate Prompts"):
+            with gr.Tabs() as tabs:
+                with gr.TabItem("Chat & Generate Prompts", id="chat_tab") as chat_tab:
                     with gr.Row():
                         # Left Column - Chat Interface (scale=3 for wider)
                         with gr.Column(scale=3):
                             # Scene settings at the top
                             gr.Markdown("### Scene Settings")
+                            
+                            # Add LLM Agent Status Display
+                            with gr.Row():
+                                agent_status = gr.HTML(
+                                    value="<div style='background-color: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                                          "<p style='margin: 0; color: #6c757d;'>Checking LLM Agent Status...</p>"
+                                          "</div>"
+                                )
+                                start_agent_btn = gr.Button(
+                                    "Start LLM Agent",
+                                    size="sm",
+                                    variant="primary",
+                                    visible=False
+                                )
+                                refresh_status_btn = gr.Button(
+                                    "Refresh Status",
+                                    size="sm",
+                                    variant="secondary"
+                                )
+                                
+
                             chatbot = gr.Chatbot(
                                 height=400, value=[(None, self.INITIAL_MESSAGE)]
                             )
@@ -138,6 +161,68 @@ class SceneGeneratorInterface:
                             suggested_objects_state = gr.State([])  # List of suggested objects
                             accepted_objects_state = gr.State([])   # List of accepted objects
 
+                    def check_agent_status():
+                        """Check the LLM agent status and update the display."""
+                        is_healthy = self.agent.check_agent_health()
+                        if is_healthy:
+                            status_html = (
+                                "<div style='background-color: #d4edda; padding: 10px; border-radius: 8px; border: 1px solid #c3e6cb;'>"
+                                "<p style='margin: 0; color: #155724;'>✓ LLM Agent is online and ready</p>"
+                                "</div>"
+                            )
+                            # Enable UI elements when agent is healthy
+                            return (
+                                status_html,
+                                gr.update(interactive=True),  # msg textbox
+                                gr.update(interactive=True),  # submit button
+                                gr.update(interactive=True),  # generate prompts button
+                                gr.update(interactive=True)   # clear button
+                            )
+                        else:
+                            status_html = (
+                                "<div style='background-color: #f8d7da; padding: 10px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
+                                "<p style='margin: 0; color: #721c24;'>✗ LLM Agent is offline or unavailable. Please start the agent manually.</p>"
+                                "<p style='margin: 5px 0 0 0; color: #721c24;'>Follow the instructions at: <a href='https://github.com/anmaurya001/chat-to-3d/tree/main?tab=readme-ov-file#method-2-manual-installation-1' target='_blank'>LLM Agent NIM Startup Guide</a></p>"
+                                "</div>"
+                            )
+                            # Disable UI elements when agent is unhealthy
+                            return (
+                                status_html,
+                                gr.update(interactive=False),  # msg textbox
+                                gr.update(interactive=False),  # submit button
+                                gr.update(interactive=False),  # generate prompts button
+                                gr.update(interactive=False)   # clear button
+                            )
+                            
+                    def start_llm_agent():
+                        """Check LLM status and attempt to start if down."""
+                        # First check current status
+                        is_healthy = self.agent.check_agent_health()
+                        if is_healthy:
+                            # If already healthy, just return current status
+                            return check_agent_status()
+
+                        # If not healthy, try to start the agent
+                        logger.info("Attempting to start LLM agent...")
+                        try:
+                            # TODO: Add actual agent start logic here
+                            # For now, just log the attempt
+                            logger.info("LLM agent start requested")
+
+                            # Check status again after attempted start
+                            is_healthy = self.agent.check_agent_health()
+                            if is_healthy:
+                                logger.info("LLM agent started successfully")
+                            else:
+                                logger.warning("LLM agent failed to start")
+
+                            # Return updated status
+                            return check_agent_status()
+
+                        except Exception as e:
+                            logger.error(f"Error starting LLM agent: {e}")
+                            return check_agent_status()
+
                     def clear_chat():
                         """Clear the chat and reset object lists."""
                         # Clear agent's memory
@@ -164,6 +249,15 @@ class SceneGeneratorInterface:
 
                     def respond(message, chat_history, suggested, accepted):
                         """Handle chat response and update suggested objects."""
+                        # Check agent status first
+                        if not self.agent.check_agent_health():
+                            chat_history.append((message, "Error: LLM agent is currently unavailable. Please refresh status."))
+                            return chat_history, "", gr.update(choices=[]), accepted, gr.update(
+                                value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                                      "<p style='margin: 0; color: #6c757d;'>No objects accepted yet</p>"
+                                      "</div>"
+                            )
+
                         # Pass current accepted objects to the agent
                         response = self.agent.chat(message, current_objects=accepted)
                         # First element is user message, second is assistant response
@@ -206,6 +300,14 @@ class SceneGeneratorInterface:
 
                     def on_generate_prompts(chat_history, accepted_objects):
                         """Generate 3D prompts for the accepted objects."""
+                        # Check agent status first
+                        if not self.agent.check_agent_health():
+                            return gr.update(
+                                value="<div style='background-color: #f8d7da; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
+                                      "<p style='margin: 0; color: #721c24;'>Error: LLM agent is currently unavailable. Please refresh status.</p>"
+                                      "</div>"
+                            ), "", gr.update(choices=[], value=None, interactive=False), "LLM Agent is offline"
+
                         if not accepted_objects:
                             return gr.update(
                                 value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
@@ -550,8 +652,6 @@ class SceneGeneratorInterface:
                             
                             all_variants = {}
                             
-                            # Get the current selected object
-                            current_object = object_dropdown.value
                             
                             for scene in data['scenes']:
                                 for obj in scene['objects']:
@@ -1240,6 +1340,74 @@ class SceneGeneratorInterface:
 
                 # Update object list when the tab is selected
                 demo.load(fn=update_object_list, outputs=[object_dropdown, generation_status])
+
+                # Add initial status check when app starts
+                demo.load(
+                    fn=check_agent_status,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+
+                # Add periodic status check
+                demo.load(
+                    fn=check_agent_status,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ],
+                    every=30  # Check every 30 seconds
+                )
+
+                # Add immediate status check when chat tab is selected
+                def on_tab_select():
+                    #clean SANA pipeline
+                    if self.generator.sana_pipeline and self.generator.is_llm_shutdown_required(vram_threshold=VRAM_THRESHOLD):
+                        logger.info("Cleaning up SANA pipeline")
+                        self.generator.cleanup_sana_pipeline()
+                    return check_agent_status()
+
+                tabs.select(
+                    fn=on_tab_select,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+
+                # Add handler for manual status check button
+                refresh_status_btn.click(
+                    fn=check_agent_status,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+
+                start_agent_btn.click(
+                    fn=start_llm_agent,
+                    outputs=[
+                        agent_status,
+                        msg,  # textbox
+                        submit_btn,  # send button
+                        generate_prompts_btn,  # generate prompts button
+                        clear_btn  # clear button
+                    ]
+                )
+                
 
                 # Set up event handlers for chat and prompt generation
                 clear_btn.click(

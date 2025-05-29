@@ -92,7 +92,7 @@ pip install -r requirements.txt
 
 ### Method 1: Docker Installation/Pre built docker image
 
-1. Start the LLM NIM
+1. Start the LLM Agent NIM
 ```bash
 cd nim_llm
 pip install -r requirements.txt

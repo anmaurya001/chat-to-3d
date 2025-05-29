@@ -9,6 +9,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 try:
     # Step 1: Resolve shell script path
     script_dir = Path(__file__).resolve().parent
+    ngc_path = script_dir / "ngc.py"
     windows_script_path = script_dir / "start_llama_container.sh"
 
     # Convert Windows path to WSL path
@@ -18,7 +19,7 @@ try:
 
     # Step 2: Get NGC API Key
     ngc_api_key = subprocess.check_output(
-        [sys.executable, "ngc.py"],
+        [sys.executable, ngc_path],
         stderr=subprocess.STDOUT,
         text=True
     ).strip()
