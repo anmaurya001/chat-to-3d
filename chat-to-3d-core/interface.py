@@ -125,7 +125,7 @@ class SceneGeneratorInterface:
 
                             prompts_output = gr.HTML(
                                 value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
-                                      "<p style='margin: 0; color: #6c757d;'>No prompts generated yet</p>"
+                                      "<p style='margin: 0; color: #6c757d;'>Ready to generate prompts</p>"
                                       "</div>"
                             )
 
@@ -176,7 +176,12 @@ class SceneGeneratorInterface:
                                 gr.update(interactive=True),  # msg textbox
                                 gr.update(interactive=True),  # submit button
                                 gr.update(interactive=True),  # generate prompts button
-                                gr.update(interactive=True)   # clear button
+                                gr.update(interactive=True),  
+                                gr.update(
+                                    value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                                      "<p style='margin: 0; color: #6c757d;'>Ready to generate prompts</p>"
+                                      "</div>"
+                                )   # prompts_output
                             )
                         else:
                             status_html = (
@@ -185,13 +190,19 @@ class SceneGeneratorInterface:
                                 "<p style='margin: 5px 0 0 0; color: #721c24;'>Follow the instructions at: <a href='https://github.com/anmaurya001/chat-to-3d/tree/main?tab=readme-ov-file#method-2-manual-installation-1' target='_blank'>LLM Agent NIM Startup Guide</a></p>"
                                 "</div>"
                             )
+                            
                             # Disable UI elements when agent is unhealthy
                             return (
                                 status_html,
                                 gr.update(interactive=False),  # msg textbox
                                 gr.update(interactive=False),  # submit button
                                 gr.update(interactive=False),  # generate prompts button
-                                gr.update(interactive=False)   # clear button
+                                gr.update(interactive=False),   # clear button
+                                gr.update(
+                                value="<div style='background-color: #f8d7da; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;'>"
+                                      "<p style='margin: 0; color: #721c24;'>Error: LLM agent is currently unavailable. Please refresh status.</p>"
+                                      "</div>"
+                                )   # prompts_output
                             )
                             
                     def start_llm_agent():
@@ -241,7 +252,7 @@ class SceneGeneratorInterface:
                             ),
                             gr.update(                      # prompts_output
                                 value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
-                                      "<p style='margin: 0; color: #6c757d;'>No prompts generated yet</p>"
+                                      "<p style='margin: 0; color: #6c757d;'>Ready to generate prompts</p>"
                                       "</div>"
                             ),
                             ""                              # generation_prompt_display
@@ -252,11 +263,20 @@ class SceneGeneratorInterface:
                         # Check agent status first
                         if not self.agent.check_agent_health():
                             chat_history.append((message, "Error: LLM agent is currently unavailable. Please refresh status."))
-                            return chat_history, "", gr.update(choices=[]), accepted, gr.update(
-                                value="<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
-                                      "<p style='margin: 0; color: #6c757d;'>No objects accepted yet</p>"
-                                      "</div>"
-                            )
+                            
+                            all_objects = [obj for obj in accepted if obj not in suggested] + suggested
+                            # Format accepted objects display properly
+                            accepted_html = "<div style='background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;'>"
+                            if accepted:
+                                accepted_html += "<ul style='margin: 0; padding-left: 20px;'>"
+                                for obj in accepted:
+                                    accepted_html += f"<li style='margin: 5px 0; color: #212529;'>{obj}</li>"
+                                accepted_html += "</ul>"
+                            else:
+                                accepted_html += "<p style='margin: 0; color: #6c757d;'>No objects accepted yet</p>"
+                            accepted_html += "</div>"
+                            
+                            return chat_history, "", gr.update(choices=all_objects),suggested, accepted, gr.update(value=accepted_html)
 
                         # Pass current accepted objects to the agent
                         response = self.agent.chat(message, current_objects=accepted)
@@ -281,7 +301,7 @@ class SceneGeneratorInterface:
                             accepted_html += "<p style='margin: 0; color: #6c757d;'>No objects accepted yet</p>"
                         accepted_html += "</div>"
                         
-                        return chat_history, "", gr.update(choices=all_objects), accepted, gr.update(value=accepted_html)
+                        return chat_history, "", gr.update(choices=all_objects), objects, accepted, gr.update(value=accepted_html)
 
                     def update_accepted_objects(selected_objects):
                         """Update accepted objects based on checkbox selection."""
@@ -1349,22 +1369,23 @@ class SceneGeneratorInterface:
                         msg,  # textbox
                         submit_btn,  # send button
                         generate_prompts_btn,  # generate prompts button
-                        clear_btn  # clear button
+                        clear_btn,  # clear button
+                        prompts_output
                     ]
                 )
 
                 # Add periodic status check
-                demo.load(
-                    fn=check_agent_status,
-                    outputs=[
-                        agent_status,
-                        msg,  # textbox
-                        submit_btn,  # send button
-                        generate_prompts_btn,  # generate prompts button
-                        clear_btn  # clear button
-                    ],
-                    every=30  # Check every 30 seconds
-                )
+                # demo.load(
+                #     fn=check_agent_status,
+                #     outputs=[
+                #         agent_status,
+                #         msg,  # textbox
+                #         submit_btn,  # send button
+                #         generate_prompts_btn,  # generate prompts button
+                #         clear_btn  # clear button
+                #     ],
+                #     every=30  # Check every 30 seconds
+                # )
 
                 # Add immediate status check when chat tab is selected
                 def on_tab_select():
@@ -1381,7 +1402,8 @@ class SceneGeneratorInterface:
                         msg,  # textbox
                         submit_btn,  # send button
                         generate_prompts_btn,  # generate prompts button
-                        clear_btn  # clear button
+                        clear_btn,  # clear button
+                        prompts_output
                     ]
                 )
 
@@ -1393,7 +1415,8 @@ class SceneGeneratorInterface:
                         msg,  # textbox
                         submit_btn,  # send button
                         generate_prompts_btn,  # generate prompts button
-                        clear_btn  # clear button
+                        clear_btn , # clear button
+                        prompts_output
                     ]
                 )
 
@@ -1428,13 +1451,13 @@ class SceneGeneratorInterface:
                 submit_btn.click(
                     respond, 
                     [msg, chatbot, suggested_objects_state, accepted_objects_state], 
-                    [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
+                    [chatbot, msg, suggested_objects_checkboxes, suggested_objects_state, accepted_objects_state, accepted_objects_display]
                 )
                 
                 msg.submit(
                     respond, 
                     [msg, chatbot, suggested_objects_state, accepted_objects_state], 
-                    [chatbot, msg, suggested_objects_checkboxes, accepted_objects_state, accepted_objects_display]
+                    [chatbot, msg, suggested_objects_checkboxes, suggested_objects_state, accepted_objects_state, accepted_objects_display]
                 )
 
                 # Handle checkbox changes
