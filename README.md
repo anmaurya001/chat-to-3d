@@ -19,6 +19,7 @@ Can also use pre built docker image. Refer to the usage section after step 1.
 
 1. Clone this repository:
 ```bash
+git lfs install
 git clone --recursive https://github.com/anmaurya001/chat-to-3d.git
 
 # If you forgot --recursive during clone:
