@@ -34,6 +34,7 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 TRELLIS_TEXT_LARGE_MODEL = "JeffreyXiang/TRELLIS-text-large"
 TRELLIS_TEXT_BASE_MODEL = "JeffreyXiang/TRELLIS-text-base"
 
+TRELLIS_IMAGE_LARGE_MODEL = "microsoft/TRELLIS-image-large"
 
 # Model configuration
 TRELLIS_MODEL_NAME_MAP = {

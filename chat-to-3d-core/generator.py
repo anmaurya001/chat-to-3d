@@ -27,6 +27,7 @@ from config import (
     TRELLIS_MODEL_NAME_MAP,
     DEFAULT_TRELLIS_MODEL,
     VRAM_THRESHOLD,
+    TRELLIS_IMAGE_LARGE_MODEL
 )
 from trellis.representations import Gaussian, MeshExtractResult
 from PIL import Image
@@ -518,7 +519,8 @@ class AssetGenerator:
         try:
             start_time = datetime.datetime.now()
             logger.info("Initializing TRELLIS model...")
-            self.trellis_model = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
+            #self.trellis_model = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
+            self.trellis_model = TrellisImageTo3DPipeline.from_pretrained(TRELLIS_IMAGE_LARGE_MODEL)
             self.trellis_model.cuda()
             end_time = datetime.datetime.now()
             load_time = (end_time - start_time).total_seconds()
