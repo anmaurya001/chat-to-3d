@@ -13,6 +13,7 @@ An application that combines natural language processing with 3D asset generatio
 ## Installation 
 
 #### Prerequisites
+Please make sure NIM Prerequisite Installer and git is installed. [NIM Installer] (https://github.com/NVIDIA-AI-Blueprints/3d-guided-genai-rtx?tab=readme-ov-file#prerequisites)
 
 ### Windows Installation 
 
@@ -66,10 +67,10 @@ Press any key to continue . . .
 
 1. Start the LLM Agent NIM:
 ```bash
-cd nim_llm
 # Activate virtual environment
 # On Windows:
 .venv\Scripts\activate
+cd nim_llm
 python run_llama.py
 ```
 
@@ -86,6 +87,13 @@ python run.py
 ```
 
 3. Open your browser to the URL shown in the terminal (typically http://localhost:7860)
+
+4. Optional, to log memory usage
+```bash
+.venv\Scripts\activate
+cd mem_logging
+python monitor_resources.py -i <frequency in secs>
+```
 
 ### Managing the Application
 
