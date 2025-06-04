@@ -25,6 +25,7 @@ git+https://github.com/autonomousvision/mip-splatting.git#subdirectory=submodule
 
 --find-links https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.5.1_cu124.html
 kaolin
+./patchfiles/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp311-cp311-win_amd64.whl
 
 spconv-cu120==2.3.6
 
