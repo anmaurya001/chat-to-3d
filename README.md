@@ -13,7 +13,7 @@ An application that combines natural language processing with 3D asset generatio
 ## Installation 
 
 #### Prerequisites
-Please make sure NIM Prerequisite Installer and git is installed. [NIM Installer] (https://github.com/NVIDIA-AI-Blueprints/3d-guided-genai-rtx?tab=readme-ov-file#prerequisites)
+Please make sure NIM Prerequisite Installer and git is installed. [Refer](https://github.com/NVIDIA-AI-Blueprints/3d-guided-genai-rtx?tab=readme-ov-file#prerequisites)
 
 ### Windows Installation 
 
