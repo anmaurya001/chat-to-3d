@@ -1,3 +1,12 @@
+bl_info = {
+    "name": "CHAT-TO-3D Server Manager",
+    "author": "Your Name",
+    "version": (1, 0),
+    "blender": (4, 2, 0),
+    "category": "3D View",
+    "description": "Manages the CHAT-TO-3D server for 3D asset generation within Blender",
+}
+
 import bpy
 import os
 import subprocess
@@ -10,6 +19,7 @@ import errno
 import platform
 import ctypes
 import logging
+import shutil
 from bpy.types import Operator, Panel, AddonPreferences
 from bpy.props import StringProperty, EnumProperty
 
@@ -69,25 +79,35 @@ def get_conda_python_path():
         if os.path.basename(conda_base) == "trellis" and os.path.basename(os.path.dirname(conda_base)) == "envs":
             conda_base = os.path.dirname(os.path.dirname(conda_base))
             logger.debug("Adjusted Conda base from CONDA_PREFIX: %s", conda_base)
-    else:
-        try:
-            result = subprocess.run(
-                ["conda", "info", "--base"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0 and result.stdout:
-                conda_base = result.stdout.strip()
-                logger.debug("Found Conda base using 'conda info --base': %s", conda_base)
+    
+    if not conda_base or not os.path.isdir(conda_base):
+        addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        conda_base = addon_prefs.conda_base_path.strip()
+        if conda_base and os.path.isdir(conda_base):
+            logger.debug("Using Conda base from addon preferences: %s", conda_base)
+        else:
+            conda_exe = shutil.which("conda")
+            if conda_exe:
+                try:
+                    result = subprocess.run(
+                        [conda_exe, "info", "--base"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        conda_base = result.stdout.strip()
+                        logger.debug("Found Conda base using 'conda info --base': %s", conda_base)
+                    else:
+                        logger.warning("Could not locate Conda base using 'conda info --base': %s", result.stderr)
+                except (subprocess.SubprocessError, FileNotFoundError) as e:
+                    logger.error("Failed to locate Conda base using 'conda info --base': %s", str(e))
             else:
-                logger.warning("Could not locate Conda base using 'conda info --base': %s", result.stderr)
+                logger.warning("Conda executable not found in PATH")
+            
+            if not conda_base or not os.path.isdir(conda_base):
                 conda_base = os.path.expanduser("~/Miniconda3")
                 logger.debug("Falling back to default Conda base: %s", conda_base)
-        except subprocess.SubprocessError as e:
-            logger.error("Failed to locate Conda base using 'conda info --base': %s", str(e))
-            conda_base = os.path.expanduser("~/Miniconda3")
-            logger.debug("Falling back to default Conda base: %s", conda_base)
 
     if platform.system() == "Windows":
         python_path = os.path.join(conda_base, "envs", "trellis", "python.exe")
@@ -105,9 +125,9 @@ def get_conda_python_path():
             logger.debug("Conda Python version: %s", result.stdout.strip())
             return python_path
         except subprocess.SubprocessError as e:
-            logger.error("Failed to verify Conda Python: %s", str(e))
+            logger.error("Failed to verify Conda Python at %s: %s", python_path, str(e))
             return None
-    logger.warning("Conda Python not found at %s", python_path)
+    logger.error("Conda Python not found at %s. Ensure the 'trellis' environment is set up correctly.", python_path)
     return None
 
 def try_curl_health_check():
@@ -142,7 +162,6 @@ def stop_llm_service():
     container_name = "CHAT_TO_3D"
     
     def is_container_running():
-        """Check if the CHAT_TO_3D container is running or exists."""
         try:
             result = subprocess.run(
                 ["wsl", "podman", "ps", "-a", "--format", "{{.Names}} {{.Status}}"],
@@ -164,14 +183,12 @@ def stop_llm_service():
             logger.error(f"Error checking container status: {str(e)}")
             return False
     
-    # Check if container exists
     if not is_container_running():
         logger.info(f"No {container_name} container found, assuming LLM service is not running")
         with llm_status_lock:
             llm_status = "NOT READY"
         return True
     
-    # Try to stop the container (up to 2 attempts)
     stop_attempts = 2
     for attempt in range(1, stop_attempts + 1):
         logger.info(f"Attempt {attempt}/{stop_attempts} to stop {container_name} container")
@@ -195,7 +212,6 @@ def stop_llm_service():
     else:
         logger.error(f"Failed to stop {container_name} container after {stop_attempts} attempts")
     
-    # Monitor container status for up to 15 seconds
     start_time = time.time()
     timeout = 15
     while time.time() - start_time < timeout:
@@ -207,7 +223,6 @@ def stop_llm_service():
         logger.debug(f"Waiting for {container_name} container to stop...")
         time.sleep(1)
     
-    # If container is still running, force remove it
     logger.warning(f"{container_name} container did not stop within {timeout} seconds, attempting force removal")
     try:
         result = subprocess.run(
@@ -225,7 +240,6 @@ def stop_llm_service():
         logger.error(f"Error force-removing {container_name} container: {str(e)}")
         return False
     
-    # Monitor again for up to 15 seconds
     start_time = time.time()
     while time.time() - start_time < timeout:
         if not is_container_running():
@@ -398,7 +412,7 @@ def process_exists(pid):
             return True
         return False
     except ImportError:
-        logger.warning("psutil is not installed, using fallback method. Install it for reliable process management: C:\\Program Files\\WindowsApps\\BlenderFoundation.Blender4.2LTS_4.2.9.0_x64__ppwjx1n5r4v9t\\Blender\\4.2\\python\\bin\\pip install psutil")
+        logger.warning("psutil is not installed, using fallback method. Install it for reliable process management: C:\\Program Files\\WindowsApps\\BlenderFoundation.Blender4.2LTS_4.2.10.0_x64__ppwjx1n5r4v9t\\Blender\\4.2\\python\\bin\\pip install psutil")
         if platform.system() == "Windows":
             PROCESS_QUERY_INFORMATION = 0x0400
             handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, pid)
@@ -439,6 +453,13 @@ class TrellisAddonPreferences(AddonPreferences):
         subtype='DIR_PATH'
     )
 
+    conda_base_path: StringProperty(
+        name="Conda Base Path",
+        description="Base path for Conda installation (e.g., C:\\Users\\NV\\Miniconda3)",
+        default="",
+        subtype='DIR_PATH'
+    )
+
     console_log_level: EnumProperty(
         name="Console Log Level",
         description="Set the level of messages displayed in the console",
@@ -455,17 +476,126 @@ class TrellisAddonPreferences(AddonPreferences):
         layout = self.layout
         layout.label(text="Chat-to-3D Preferences")
         layout.prop(self, "base_path")
+        layout.prop(self, "conda_base_path")
         layout.label(text="Logging Preferences")
         layout.prop(self, "console_log_level")
+
+class TrellisManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TrellisManager, cls).__new__(cls)
+            cls._instance.__initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, '__initialized'):
+            self.trellis_process = None
+            self.stdout_thread = None
+            self.stderr_thread = None
+            self.__initialized = True
+
+    def start_trellis(self, python_path, base_path):
+        """Start the Trellis server and capture its output."""
+        global trellis_status
+        trellis_run_script = os.path.join(base_path, "chat-to-3d-core", "run.py")
+        if not os.path.isfile(trellis_run_script):
+            logger.error(f"Trellis run script not found: {trellis_run_script}")
+            return False
+
+        os.environ['ATTN_BACKEND'] = 'flash-attn'
+        os.environ['SPCONV_ALGO'] = 'native'
+        os.environ['XFORMERS_FORCE_DISABLE_TRITON'] = '1'
+        try:
+            self.trellis_process = subprocess.Popen(
+                [python_path, trellis_run_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=os.path.join(base_path, "chat-to-3d-core"),
+                creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+            )
+            logger.info("Trellis server started with PID %d", self.trellis_process.pid)
+
+            def log_output(pipe, log_func):
+                while not log_output_stop.is_set():
+                    try:
+                        line = pipe.readline()
+                        if not line:
+                            break
+                        if "INFO" in line:
+                            logger.info(line.strip())
+                        elif "DEBUG" in line:
+                            logger.debug(line.strip())
+                        elif "WARNING" in line:
+                            logger.warning(line.strip())
+                        else:
+                            log_func(line.strip())
+                    except ValueError as e:
+                        logger.debug(f"Pipe closed while logging: {e}")
+                        break
+                    except Exception as e:
+                        logger.error(f"Error while logging output: {e}")
+                        break
+
+            self.stdout_thread = threading.Thread(
+                target=log_output,
+                args=(self.trellis_process.stdout, lambda x: logger.info("Trellis stdout: %s", x)),
+                daemon=True
+            )
+            self.stderr_thread = threading.Thread(
+                target=log_output,
+                args=(self.trellis_process.stderr, lambda x: logger.error("Trellis stderr: %s", x)),
+                daemon=True
+            )
+            self.stdout_thread.start()
+            self.stderr_thread.start()
+
+            start_time = time.time()
+            timeout = 30
+            retry_interval = 1
+            while time.time() - start_time < timeout:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+                        client.settimeout(1)
+                        client.connect(('localhost', 12345))
+                        with trellis_status_lock:
+                            trellis_status = "READY"
+                        logger.info("TRELLIS server started successfully")
+                        return True
+                except (ConnectionRefusedError, socket.timeout) as e:
+                    logger.debug(f"Failed to connect to Trellis server: {e}, retrying...")
+                    time.sleep(retry_interval)
+            logger.error("TRELLIS server failed to start within timeout")
+            self.stop_trellis()
+            return False
+        except Exception as e:
+            logger.error(f"Failed to start TRELLIS: {str(e)}")
+            self.stop_trellis()
+            return False
+
+    def stop_trellis(self):
+        """Stop the Trellis server and clean up resources."""
+        if self.trellis_process:
+            log_output_stop.set()
+            if self.stdout_thread:
+                self.stdout_thread.join(timeout=5)
+            if self.stderr_thread:
+                self.stderr_thread.join(timeout=5)
+            try:
+                self.trellis_process.stdout.close()
+                self.trellis_process.stderr.close()
+            except Exception as e:
+                logger.debug(f"Error closing pipes: {e}")
+            self.trellis_process = None
+            self.stdout_thread = None
+            self.stderr_thread = None
+            log_output_stop.clear()
 
 class TRELLIS_OT_ManageTrellis(Operator):
     bl_idname = "trellis.manage_trellis"
     bl_label = "Manage TRELLIS"
-    
-    def __init__(self):
-        self.trellis_process = None
-        self.stdout_thread = None
-        self.stderr_thread = None
 
     def check_llm_ready(self, timeout=120):
         """Check if LLM service is ready, with timeout in seconds."""
@@ -565,9 +695,11 @@ class TRELLIS_OT_ManageTrellis(Operator):
     
     def execute(self, context):
         global trellis_status, llm_status
+        manager = TrellisManager()
+        
         with trellis_status_lock, llm_status_lock:
             current_status = "READY" if trellis_status == "READY" and llm_status == "READY" else "NOT READY"
-            print(f"Current Status is: {current_status}")
+            logger.info(f"Current Status is: {current_status}")
             llm_stat = llm_status
             trellis_stat = trellis_status
         
@@ -580,28 +712,11 @@ class TRELLIS_OT_ManageTrellis(Operator):
         trellis_run_script = os.path.join(base_path, "chat-to-3d-core", "run.py")
         
         python_path = get_conda_python_path()
-        if not python_path or not os.path.isfile(python_path):
-            self.report({'ERROR'}, "Conda Python executable not found")
+        if not python_path:
+            self.report({'ERROR'}, "Conda Python executable not found. Set Conda Base Path in addon preferences or ensure conda is in PATH.")
             return {'CANCELLED'}
         
         if current_status == "READY":
-            if self.trellis_process:
-                log_output_stop.set()
-                if self.stdout_thread:
-                    self.stdout_thread.join()
-                if self.stderr_thread:
-                    self.stderr_thread.join()
-                if self.trellis_process:
-                    try:
-                        self.trellis_process.stdout.close()
-                        self.trellis_process.stderr.close()
-                    except Exception as e:
-                        logger.debug(f"Error closing pipes: {e}")
-                    self.trellis_process = None
-                    self.stdout_thread = None
-                    self.stderr_thread = None
-                log_output_stop.clear()
-
             # Stop LLM service
             if not stop_llm_service():
                 self.report({'WARNING'}, "Failed to stop LLM service, continuing with Trellis termination")
@@ -611,16 +726,18 @@ class TRELLIS_OT_ManageTrellis(Operator):
             # Stop Trellis service
             terminator = TrellisTerminator()
             tw = terminator.terminate_and_wait()
-            print(f'tw output is {str(tw)}')
+            logger.info(f"Trellis termination result: {str(tw)}")
             if tw:
                 self.report({'INFO'}, "TRELLIS terminated successfully")
                 with trellis_status_lock:
                     trellis_status = "NOT READY"
+                manager.stop_trellis()  # Clean up any remaining resources
                 response, success = try_curl_health_check()
                 with llm_status_lock:
                     llm_status = "READY" if success and response.get("message") == "Service is ready." else "NOT READY"
             else:
                 self.report({'ERROR'}, "Failed to terminate TRELLIS")
+                return {'CANCELLED'}
         else:
             if not os.path.isfile(llm_start_script):
                 self.report({'ERROR'}, f"LLM start script not found: {llm_start_script}")
@@ -641,6 +758,10 @@ class TRELLIS_OT_ManageTrellis(Operator):
                     logger.info("LLM service not ready: response=%s", response if success else "no response")
                 
                 if not llm_already_ready:
+                    if not stop_llm_service():
+                        self.report({'WARNING'}, "Failed to stop existing LLM service, continuing with startup")
+                    else:
+                        self.report({'INFO'}, "Existing LLM service stopped successfully")
                     llm_thread = threading.Thread(target=self.start_llm, daemon=True)
                     llm_thread.start()
                     
@@ -654,104 +775,19 @@ class TRELLIS_OT_ManageTrellis(Operator):
                 self.report({'INFO'}, "LLM service is already READY, skipping startup")
             
             if trellis_stat != "READY":
-                os.environ['ATTN_BACKEND'] = 'flash-attn'
-                os.environ['SPCONV_ALGO'] = 'native'
-                os.environ['XFORMERS_FORCE_DISABLE_TRITON'] = '1'
-                try:
-                    trellis_process = subprocess.Popen(
-                        [python_path, trellis_run_script],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        cwd=os.path.join(base_path, "chat-to-3d-core"),
-                        creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
-                    )
-                    logger.info("Trellis server started with PID %d", trellis_process.pid)
-
-                    def log_output(pipe, log_func):
-                        while not log_output_stop.is_set():
-                            try:
-                                line = pipe.readline()
-                                if not line:
-                                    break
-                                if "INFO" in line:
-                                    logger.info(line.strip())
-                                elif "DEBUG" in line:
-                                    logger.debug(line.strip())
-                                elif "WARNING" in line:
-                                    logger.warning(line.strip())
-                                else:
-                                    log_func(line.strip())
-                            except ValueError as e:
-                                logger.debug(f"Pipe closed while logging: {e}")
-                                break
-                            except Exception as e:
-                                logger.error(f"Error while logging output: {e}")
-                                break
-
-                    stdout_thread = threading.Thread(
-                        target=log_output,
-                        args=(trellis_process.stdout, lambda x: logger.info("Trellis stdout: %s", x)),
-                        daemon=True
-                    )
-                    stderr_thread = threading.Thread(
-                        target=log_output,
-                        args=(trellis_process.stderr, lambda x: logger.error("Trellis stderr: %s", x)),
-                        daemon=True
-                    )
-                    stdout_thread.start()
-                    stderr_thread.start()
-
-                    self.trellis_process = trellis_process
-                    self.stdout_thread = stdout_thread
-                    self.stderr_thread = stderr_thread
-
-                    start_time = time.time()
-                    timeout = 30
-                    retry_interval = 1
-                    while time.time() - start_time < timeout:
-                        try:
-                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-                                client.settimeout(1)
-                                client.connect(('localhost', 12345))
-                                with trellis_status_lock:
-                                    trellis_status = "READY"
-                                self.report({'INFO'}, "TRELLIS server started successfully")
-                                break
-                        except (ConnectionRefusedError, socket.timeout) as e:
-                            logger.debug(f"Failed to connect to Trellis server: {e}, retrying...")
-                            time.sleep(retry_interval)
-                    else:
-                        self.report({'ERROR'}, "TRELLIS server failed to start within timeout")
-                        raise TimeoutError("Trellis server did not start within timeout")
-                except Exception as e:
-                    self.report({'ERROR'}, f"Failed to start TRELLIS: {str(e)}")
-                    logger.error("Trellis startup error: %s", str(e))
-                    if self.trellis_process:
-                        log_output_stop.set()
-                        if self.stdout_thread:
-                            self.stdout_thread.join()
-                        if self.stderr_thread:
-                            self.stderr_thread.join()
-                        try:
-                            self.trellis_process.stdout.close()
-                            self.trellis_process.stderr.close()
-                        except Exception as e:
-                            logger.debug(f"Error closing pipes: {e}")
-                        self.trellis_process = None
-                        self.stdout_thread = None
-                        self.stderr_thread = None
-                        log_output_stop.clear()
-                    raise
+                if not manager.start_trellis(python_path, base_path):
+                    self.report({'ERROR'}, "Failed to start TRELLIS server")
+                    return {'CANCELLED'}
+                self.report({'INFO'}, "TRELLIS server started successfully")
             else:
                 logger.info("Trellis service is already READY, skipping startup")
                 self.report({'INFO'}, "Trellis service is already READY, skipping startup")
         
         return {'FINISHED'}
 
-class TRELLIS_PT_Panel(Panel):
+class VIEW3D_PT_CHAT_TO_3D(Panel):
     bl_label = "CHAT-TO-3D Server Manager"
-    bl_idname = "PT_CHAT-TO-3D_Panel"
+    bl_idname = "VIEW3D_PT_chat_to_3d"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'CHAT-TO-3D'
@@ -809,11 +845,14 @@ def update_status_ui():
 classes = (
     TrellisAddonPreferences,
     TRELLIS_OT_ManageTrellis,
-    TRELLIS_PT_Panel,
+    VIEW3D_PT_CHAT_TO_3D,
 )
 
 def register():
-    print("CHAT-TO-3D Server Manager Add-on Loaded - Version 1.0 - May 30, 2025")
+    print("CHAT-TO-3D Server Manager Add-on Loaded - Version 1.0 - June 16, 2025")
+    if bpy.app.version < (4, 2, 0):
+        print("Warning: This add-on requires Blender 4.2.0 or higher")
+        return
     for cls in classes:
         bpy.utils.register_class(cls)
     setup_logging()
@@ -824,13 +863,11 @@ def unregister():
     global log_output_stop
     log_output_stop.set()
     
-    # Stop LLM service
     if not stop_llm_service():
         logger.warning("Failed to stop LLM service during unregister")
     else:
         logger.info("LLM service stopped successfully during unregister")
 
-    # Stop Trellis service
     terminator = TrellisTerminator()
     tw = terminator.terminate_and_wait()
     if tw:
@@ -842,6 +879,8 @@ def unregister():
             llm_status = "READY" if success and response.get("message") == "Service is ready." else "NOT READY"
     else:
         logger.error("Failed to terminate TRELLIS during unregister")
+
+    TrellisManager().stop_trellis()
 
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
