@@ -3,5 +3,6 @@ griptape[all]
 psutil
 accelerate
 pynvml
+requests
 psutil==5.9.8
 gputil==1.4.0 
