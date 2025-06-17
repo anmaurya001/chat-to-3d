@@ -123,6 +123,8 @@ if errorlevel 1 (
 
 REM Download required models
 echo Downloading required models...
+set CURRENT_DIR=%cd%
+echo current directory: %CURRENT_DIR%
 cd chat-to-3d-core
 call conda run -n trellis --no-capture-output python download_models.py
 if errorlevel 1 (
@@ -131,6 +133,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+echo current directory: %CURRENT_DIR%
 cd "%CURRENT_DIR%"
 
 echo Installation completed successfully!
