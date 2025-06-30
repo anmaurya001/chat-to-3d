@@ -1,6 +1,6 @@
 bl_info = {
     "name": "CHAT-TO-3D Server Manager",
-    "author": "Your Name",
+    "author": "NVIDIA",
     "version": (1, 0),
     "blender": (4, 2, 0),
     "category": "3D View",
@@ -73,47 +73,123 @@ def setup_logging():
 
 def get_conda_python_path():
     """Attempt to find the Conda 'trellis' environment's Python executable."""
-    conda_base = os.environ.get("CONDA_PREFIX")
-    if conda_base:
-        logger.debug("Using CONDA_PREFIX: %s", conda_base)
-        if os.path.basename(conda_base) == "trellis" and os.path.basename(os.path.dirname(conda_base)) == "envs":
-            conda_base = os.path.dirname(os.path.dirname(conda_base))
-            logger.debug("Adjusted Conda base from CONDA_PREFIX: %s", conda_base)
-    
-    if not conda_base or not os.path.isdir(conda_base):
-        addon_prefs = bpy.context.preferences.addons[__name__].preferences
-        conda_base = addon_prefs.conda_base_path.strip()
-        if conda_base and os.path.isdir(conda_base):
-            logger.debug("Using Conda base from addon preferences: %s", conda_base)
-        else:
-            conda_exe = shutil.which("conda")
-            if conda_exe:
-                try:
-                    result = subprocess.run(
-                        [conda_exe, "info", "--base"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                    if result.returncode == 0 and result.stdout:
-                        conda_base = result.stdout.strip()
-                        logger.debug("Found Conda base using 'conda info --base': %s", conda_base)
-                    else:
-                        logger.warning("Could not locate Conda base using 'conda info --base': %s", result.stderr)
-                except (subprocess.SubprocessError, FileNotFoundError) as e:
-                    logger.error("Failed to locate Conda base using 'conda info --base': %s", str(e))
-            else:
-                logger.warning("Conda executable not found in PATH")
-            
-            if not conda_base or not os.path.isdir(conda_base):
-                conda_base = os.path.expanduser("~/Miniconda3")
-                logger.debug("Falling back to default Conda base: %s", conda_base)
+    addon_prefs = bpy.context.preferences.addons[__name__].preferences
+    user_python_path = addon_prefs.python_path.strip()
 
+    # Step 1: Check CONDA_PREFIX (original step 2 moved up)
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix and os.path.isdir(conda_prefix):
+        if os.path.basename(conda_prefix) == "trellis" and os.path.basename(os.path.dirname(conda_prefix)) == "envs":
+            conda_base = os.path.dirname(os.path.dirname(conda_prefix))
+        else:
+            conda_base = conda_prefix
+        if platform.system() == "Windows":
+            python_path = os.path.normpath(os.path.join(conda_base, "envs", "trellis", "python.exe"))
+        else:
+            python_path = os.path.join(conda_base, "envs", "trellis", "bin", "python")
+        if os.path.isfile(python_path):
+            try:
+                result = subprocess.run(
+                    [python_path, "-c", "import sys; print(sys.version)"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    logger.info("Using Python path from CONDA_PREFIX: %s", python_path)
+                    return python_path
+            except Exception as e:
+                logger.debug("Failed to verify Python path from CONDA_PREFIX: %s", str(e))
+
+    # Step 2: Check ~/.conda/environments.txt for trellis environment
+    env_file = os.path.join(os.path.expanduser("~"), ".conda", "environments.txt")
+    if os.path.isfile(env_file):
+        try:
+            with open(env_file, 'r') as f:
+                for line in f:
+                    env_path = line.strip()
+                    if env_path and os.path.basename(env_path) == "trellis" and os.path.basename(os.path.dirname(env_path)) == "envs":
+                        logger.debug("Found trellis environment in environments.txt: %s", env_path)
+                        if platform.system() == "Windows":
+                            python_path = os.path.normpath(os.path.join(env_path, "python.exe"))
+                        else:
+                            python_path = os.path.join(env_path, "bin", "python")
+                        if os.path.isfile(python_path):
+                            try:
+                                result = subprocess.run(
+                                    [python_path, "-c", "import sys; print(sys.version)"],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5
+                                )
+                                if result.returncode == 0:
+                                    logger.info("Found Python executable from environments.txt: %s", python_path)
+                                    return python_path
+                            except Exception as e:
+                                logger.debug("Failed to verify Python from environments.txt: %s", str(e))
+        except Exception as e:
+            logger.warning("Failed to read environments.txt: %s", str(e))
+
+    # Step 3: Check user-supplied python_path (as per query request)
+    if user_python_path and os.path.isfile(user_python_path):
+        try:
+            result = subprocess.run(
+                [user_python_path, "-c", "import sys; print(sys.version)"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                logger.info("Using user-provided Python path: %s", user_python_path)
+                return user_python_path
+            else:
+                logger.warning("User-provided Python path is invalid: %s", user_python_path)
+        except Exception as e:
+            logger.warning("Failed to verify user-provided Python path: %s", str(e))
+
+    # Step 4: Check 'conda info --base'
+    conda_exe = shutil.which("conda")
+    if not conda_exe:
+        default_conda_base = os.path.expanduser("~/Miniconda3")
+        conda_exe = os.path.join(default_conda_base, "Scripts", "conda.exe") if platform.system() == "Windows" else os.path.join(default_conda_base, "bin", "conda")
+        if not os.path.isfile(conda_exe):
+            conda_exe = None
+    if conda_exe:
+        try:
+            result = subprocess.run(
+                [conda_exe, "info", "--base"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                conda_base = result.stdout.strip()
+                if platform.system() == "Windows":
+                    python_path = os.path.normpath(os.path.join(conda_base, "envs", "trellis", "python.exe"))
+                else:
+                    python_path = os.path.join(conda_base, "envs", "trellis", "bin", "python")
+                if os.path.isfile(python_path):
+                    try:
+                        result = subprocess.run(
+                            [python_path, "-c", "import sys; print(sys.version)"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            logger.info("Using Python path from 'conda info --base': %s", python_path)
+                            return python_path
+                    except Exception as e:
+                        logger.debug("Failed to verify Python path from conda info: %s", str(e))
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            logger.debug("Failed to locate Conda base using 'conda info --base': %s", str(e))
+
+    # Step 5: Fallback to default
+    default_conda_base = os.path.expanduser("~/Miniconda3")
     if platform.system() == "Windows":
-        python_path = os.path.join(conda_base, "envs", "trellis", "python.exe")
+        python_path = os.path.normpath(os.path.join(default_conda_base, "envs", "trellis", "python.exe"))
     else:
-        python_path = os.path.join(conda_base, "envs", "trellis", "bin", "python")
-    
+        python_path = os.path.join(default_conda_base, "envs", "trellis", "bin", "python")
     if os.path.isfile(python_path):
         try:
             result = subprocess.run(
@@ -122,12 +198,13 @@ def get_conda_python_path():
                 text=True,
                 timeout=5
             )
-            logger.debug("Conda Python version: %s", result.stdout.strip())
-            return python_path
-        except subprocess.SubprocessError as e:
-            logger.error("Failed to verify Conda Python at %s: %s", python_path, str(e))
-            return None
-    logger.error("Conda Python not found at %s. Ensure the 'trellis' environment is set up correctly.", python_path)
+            if result.returncode == 0:
+                logger.info("Using default fallback Python path: %s", python_path)
+                return python_path
+        except Exception as e:
+            logger.debug("Failed to verify default Python path: %s", str(e))
+
+    logger.error("Conda Python not found. Ensure the 'trellis' environment is set up correctly.")
     return None
 
 def try_curl_health_check():
@@ -141,8 +218,8 @@ def try_curl_health_check():
                 text=True,
                 timeout=5
             )
-            logger.debug("LLM health check for %s: returncode=%d, stdout=%s, stderr=%s",
-                        addr, result.returncode, result.stdout, result.stderr)
+            logger.debug("LLM health check for %s: returncode=%d, stdout=%s",
+                        addr, result.returncode, result.stdout)
             if result.returncode == 0:
                 try:
                     response = json.loads(result.stdout)
@@ -151,9 +228,9 @@ def try_curl_health_check():
                     logger.error("Failed to parse LLM health check response from %s: %s", addr, result.stdout)
                     continue
             else:
-                logger.debug("LLM health check failed for %s: stderr=%s", addr, result.stderr)
+                logger.debug("LLM health check failed for %s: ", addr)
         except subprocess.SubprocessError as e:
-            logger.debug("LLM health check failed for %s: %s", addr, str(e))
+            logger.debug("LLM health check failed for %s:", addr)
     return None, False
 
 def stop_llm_service():
@@ -412,7 +489,7 @@ def process_exists(pid):
             return True
         return False
     except ImportError:
-        logger.warning("psutil is not installed, using fallback method. Install it for reliable process management: C:\\Program Files\\WindowsApps\\BlenderFoundation.Blender4.2LTS_4.2.10.0_x64__ppwjx1n5r4v9t\\Blender\\4.2\\python\\bin\\pip install psutil")
+        logger.warning("psutil is not installed, using fallback method. Install it for reliable process management: C:\\Program Files\\WindowsApps\\BlenderFoundation.Blender4.2LTS_4.2.11.0_x64__ppwjx1n5r4v9t\\Blender\\4.2\\python\\bin\\pip install psutil")
         if platform.system() == "Windows":
             PROCESS_QUERY_INFORMATION = 0x0400
             handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, pid)
@@ -449,15 +526,15 @@ class TrellisAddonPreferences(AddonPreferences):
     base_path: StringProperty(
         name="Chat-To-3D Base Path",
         description="Base path for TrellChat-To-3D project (e.g., C:\\path\\to\\chat-to-3d)",
-        default=os.environ.get("TRELLIS_BASE_PATH", ""),
+        default=os.environ.get("CHAT_TO_3D_PATH", ""),
         subtype='DIR_PATH'
     )
 
-    conda_base_path: StringProperty(
-        name="Conda Base Path",
-        description="Base path for Conda installation (e.g., C:\\Users\\NV\\Miniconda3)",
+    python_path: StringProperty(
+        name="Python Path",
+        description="Path to the Python executable in the 'trellis' environment (e.g., C:\\Users\\NV\\Miniconda3\\envs\\trellis\\python.exe)",
         default="",
-        subtype='DIR_PATH'
+        subtype='FILE_PATH'
     )
 
     console_log_level: EnumProperty(
@@ -476,7 +553,7 @@ class TrellisAddonPreferences(AddonPreferences):
         layout = self.layout
         layout.label(text="Chat-to-3D Preferences")
         layout.prop(self, "base_path")
-        layout.prop(self, "conda_base_path")
+        layout.prop(self, "python_path")
         layout.label(text="Logging Preferences")
         layout.prop(self, "console_log_level")
 
@@ -855,7 +932,21 @@ def register():
         return
     for cls in classes:
         bpy.utils.register_class(cls)
+    
+    # Set up logging
     setup_logging()
+    
+    # Attempt to find and store Python path if not set
+    addon_prefs = bpy.context.preferences.addons[__name__].preferences
+    if not addon_prefs.python_path.strip():
+        python_path = get_conda_python_path()
+        if python_path:
+            addon_prefs.python_path = python_path
+            logger.info(f"Automatically set Python path to: {python_path}")
+        else:
+            logger.warning("Could not find Conda Python executable for trellis environment")
+    
+    # Start status threads and UI timer
     start_status_threads()
     bpy.app.timers.register(update_status_ui, persistent=True)
 
