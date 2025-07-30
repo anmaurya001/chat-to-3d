@@ -43,6 +43,16 @@ with gr.Blocks() as demo:
     ]
     gallery_data = gr.State(initial_gallery_data)
 
+    # Debug function for card clicks
+    def debug_card_click(path, title):
+        print(f"DEBUG: Card clicked! Path: {path}, Title: {title}")
+        return open_image_settings(path, title)
+
+    # Simple test function
+    def test_click():
+        print("DEBUG: Test click function called!")
+        return "Test click worked!", "images/umbrella.png", True, "<div>Test overlay</div>"
+
     card_components = []
     card_containers = []
 
@@ -66,10 +76,24 @@ with gr.Blocks() as demo:
                             card = create_image_card("", "", output_text,
                                 modal_image_title, modal_image, modal_visible, settings_modal, overlay)
 
-                        # Image click opens modal
+                        # Card click opens modal - use dynamic handler based on current gallery_data
                         if card_idx < len(initial_gallery_data):
-                            card["image_component"].select(
-                                fn=lambda p=item["path"], t=item["title"]: open_image_settings(p, t),
+                            print(f"DEBUG: Setting up click handler for card {card_idx}: {item['title']}")
+                            
+                            def create_dynamic_click_handler(card_idx):
+                                def click_handler(gallery_data):
+                                    if card_idx < len(gallery_data):
+                                        item = gallery_data[card_idx]
+                                        print(f"DEBUG: Dynamic click for card {card_idx}: {item['title']}")
+                                        return debug_card_click(item["path"], item["title"])
+                                    else:
+                                        print(f"DEBUG: Card {card_idx} not found in gallery_data")
+                                        return debug_card_click("", "")
+                                return click_handler
+                            
+                            card["card_click_btn"].click(
+                                fn=create_dynamic_click_handler(card_idx),
+                                inputs=[gallery_data],
                                 outputs=[modal_image_title, modal_image, modal_visible, overlay]
                             ).then(
                                 fn=lambda: gr.update(visible=True),
