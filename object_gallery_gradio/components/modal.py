@@ -1,4 +1,5 @@
 import gradio as gr
+import os
 
 def open_image_settings(image_path, title):
     """Open settings modal for the clicked image."""
@@ -31,5 +32,21 @@ def create_modal():
                             sources=[]
                         )
             with gr.TabItem("3D"):
-                gr.Markdown("3D preview coming soon!")
-    return settings_modal, modal_image_title, close_btn, modal_image 
+                glb_path = os.path.join("assets", "Beach_Umbrella.glb")
+                modal_3d = gr.Model3D(
+                    value=glb_path,
+                    label="3D Model Preview",
+                    clear_color=[0.0, 0.0, 0.0, 0.0],
+                    height=400
+                )
+    return settings_modal, modal_image_title, close_btn, modal_image, modal_3d
+
+def create_edit_modal():
+    """Create a modal for editing image description."""
+    with gr.Group(elem_id="edit-modal") as edit_modal:
+        edit_image_title = gr.Markdown("### Edit Image")
+        edit_description = gr.Textbox(label="Description", lines=5)
+        with gr.Row():
+            cancel_btn = gr.Button("Cancel", elem_id="cancel-edit-btn")
+            update_btn = gr.Button("Update", elem_id="update-edit-btn")
+    return edit_modal, edit_image_title, edit_description, cancel_btn, update_btn 
