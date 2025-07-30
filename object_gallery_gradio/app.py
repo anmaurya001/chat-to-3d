@@ -46,30 +46,38 @@ with gr.Blocks() as demo:
     card_components = []
     card_containers = []
 
-    # Create MAX_CARDS placeholders
-    for idx in range(MAX_CARDS):
-        with gr.Column(visible=(idx < len(initial_gallery_data))) as card_container:
-            if idx < len(initial_gallery_data):
-                item = initial_gallery_data[idx]
-                card = create_image_card(
-                    item["path"], item["title"], output_text,
-                    modal_image_title, modal_image, modal_visible, settings_modal, overlay
-                )
-            else:
-                card = create_image_card("", "", output_text,
-                    modal_image_title, modal_image, modal_visible, settings_modal, overlay)
+    # Create cards in a responsive grid using Gradio's native layout
+    cards_per_row = 4  # Adjust this number to control cards per row
+    
+    for row_start in range(0, MAX_CARDS, cards_per_row):
+        with gr.Row() as row:
+            for col_idx in range(cards_per_row):
+                card_idx = row_start + col_idx
+                if card_idx < MAX_CARDS:
+                    # Use scale=1 to fill available space, but with min_width to maintain consistency
+                    with gr.Column(scale=1, min_width=180, visible=(card_idx < len(initial_gallery_data)), elem_classes=["gallery-card"]) as card_container:
+                        if card_idx < len(initial_gallery_data):
+                            item = initial_gallery_data[card_idx]
+                            card = create_image_card(
+                                item["path"], item["title"], output_text,
+                                modal_image_title, modal_image, modal_visible, settings_modal, overlay
+                            )
+                        else:
+                            card = create_image_card("", "", output_text,
+                                modal_image_title, modal_image, modal_visible, settings_modal, overlay)
 
-            # Image click opens modal
-            card["image_component"].select(
-                fn=lambda p=item["path"], t=item["title"]: open_image_settings(p, t),
-                outputs=[modal_image_title, modal_image, modal_visible, overlay]
-            ).then(
-                fn=lambda: gr.update(visible=True),
-                outputs=settings_modal
-            )
-            
-            card_components.append(card)
-            card_containers.append(card_container)
+                        # Image click opens modal
+                        if card_idx < len(initial_gallery_data):
+                            card["image_component"].select(
+                                fn=lambda p=item["path"], t=item["title"]: open_image_settings(p, t),
+                                outputs=[modal_image_title, modal_image, modal_visible, overlay]
+                            ).then(
+                                fn=lambda: gr.update(visible=True),
+                                outputs=settings_modal
+                            )
+                        
+                        card_components.append(card)
+                        card_containers.append(card_container)
 
     # --- Utility: get all card outputs ---
     def get_all_card_outputs():
