@@ -3,17 +3,68 @@ from components.image_card import create_image_card
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
 from utils import handle_action
 import os
+import base64
 
 # Inject custom CSS/JS
 with open(os.path.join("static", "custom.css")) as f:
     custom_css = f.read()
 with open(os.path.join("static", "custom.js")) as f:
     custom_js = f.read()
+with open("./static/nvidia_logo.png", "rb") as image_file:
+    encoded = base64.b64encode(image_file.read()).decode()
 
+html = f"<div class='nvidia-logo-container'> \
+        <img src='data:image/png;base64,{encoded}' alt='NVIDIA Logo' class='nvidia-logo' width='24' height='24'> \
+        <span class='nvidia-text'></span> \
+        </div>"
 MAX_CARDS = 20
 
 with gr.Blocks() as demo:
-    gr.Markdown("# My Object Gallery")
+    # Header Section with NVIDIA branding and LLM status
+    with gr.Row(elem_classes=["header-section"]):
+        with gr.Column(scale=3):
+            with gr.Row():
+                gr.HTML(html)
+        with gr.Column(scale=1):
+            with gr.Row():
+                gr.HTML("""
+                <div class="status-section">
+                    <span class="status-text">LLM Agent is online and running</span>
+                    <button class="status-button" id="refresh-status">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                            <path d="M21 3v5h-5"></path>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                            <path d="M3 21v-5h5"></path>
+                        </svg>
+                    </button>
+                    <button class="status-button">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                        </svg>
+                    </button>
+                </div>
+                """)
+    
+    # Scene Creation Section
+    with gr.Column(elem_classes=["scene-section"]):
+        gr.Markdown("### What scene do you want to create?")
+        with gr.Row():
+            with gr.Column(scale=4):
+                scene_input = gr.Textbox(
+                    placeholder="Describe your scene and any details you want to include...",
+                    label="",
+                    lines=1,
+                    container=False,
+                    elem_classes=["scene-input"]
+                )
+            with gr.Column(scale=1):
+                send_btn = gr.Button("▶", elem_classes=["send-button"])
+    
+    # Object Gallery Section
+    gr.Markdown("### Object gallery", elem_classes=["gallery-header"])
+    
     gr.HTML(f"<style>{custom_css}</style>")
     gr.HTML(f"<script>{custom_js}</script>")
 
@@ -146,6 +197,25 @@ with gr.Blocks() as demo:
             updates.append(gr.update(visible=(idx < len(gallery_data))))
         return updates
 
+    # Scene creation function
+    def create_scene(scene_description, gallery_data):
+        if not scene_description.strip():
+            return "Please enter a scene description", gallery_data
+        
+        # Here you would typically call your 3D generation API
+        # For now, we'll just add a new card to the gallery
+        gallery_data = gallery_data.copy()
+        if len(gallery_data) < MAX_CARDS:
+            new_idx = len(gallery_data)
+            gallery_data.append({
+                "title": f"Generated Scene {new_idx+1}", 
+                "path": "images/umbrella.png", 
+                "description": scene_description
+            })
+            return f"Creating scene: {scene_description}", gallery_data
+        else:
+            return "Gallery is full. Please delete some items first.", gallery_data
+
     # --- Edit modal logic ---
     def open_edit_modal(idx, gallery_data):
         if idx < len(gallery_data):
@@ -191,6 +261,34 @@ with gr.Blocks() as demo:
         fn=shift_card_ui,
         inputs=[gallery_data],
         outputs=get_all_card_outputs()
+    )
+
+    # Send button functionality (also handles Enter key)
+    send_btn.click(
+        fn=create_scene,
+        inputs=[scene_input, gallery_data],
+        outputs=[output_text, gallery_data]
+    ).then(
+        fn=shift_card_ui,
+        inputs=[gallery_data],
+        outputs=get_all_card_outputs()
+    ).then(
+        fn=lambda: "",  # Clear the input after sending
+        outputs=[scene_input]
+    )
+
+    # Enter key functionality for scene input
+    scene_input.submit(
+        fn=create_scene,
+        inputs=[scene_input, gallery_data],
+        outputs=[output_text, gallery_data]
+    ).then(
+        fn=shift_card_ui,
+        inputs=[gallery_data],
+        outputs=get_all_card_outputs()
+    ).then(
+        fn=lambda: "",  # Clear the input after sending
+        outputs=[scene_input]
     )
 
     close_btn.click(
