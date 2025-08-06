@@ -32,7 +32,7 @@ def create_modal():
                             sources=[]
                         )
             with gr.TabItem("3D"):
-                glb_path = os.path.join("assets", "Beach_Umbrella.glb")
+                glb_path = os.path.join("assets", "models", "Beach_Umbrella.glb")
                 modal_3d = gr.Model3D(
                     value=glb_path,
                     label="3D Model Preview",

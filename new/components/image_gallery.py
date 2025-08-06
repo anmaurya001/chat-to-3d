@@ -27,6 +27,8 @@ def create_image_gallery():
                     if card_idx < MAX_CARDS:
                         # Use scale=1 to fill available space, but with min_width to maintain consistency
                         with gr.Column(scale=1, min_width=180, visible=False, elem_classes=["gallery-card"]) as card_container:
+                            # Create placeholder modal components for card creation
+                            # These will be replaced by actual modal components from main app
                             card = create_image_card("", "", None, None, None, None, None, None)
                             
                             card_components.append(card)
@@ -42,7 +44,7 @@ def create_image_gallery():
         
         # Logic functions
         def delete_card_by_index(index, gallery_data):
-            print(f"Deleting card at index: {index}")
+            print(f"Deleting card at index: {index} title: {gallery_data[index]['title']}")
             updated = [item for i, item in enumerate(gallery_data) if i != index]
             return updated
 
