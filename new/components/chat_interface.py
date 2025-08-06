@@ -28,8 +28,8 @@ def create_chat_interface():
     }
 
 
-def handle_scene_description(scene_description, agent_service, gallery_data):
-    """Handle scene description and generate objects with 2D prompts, then populate gallery."""
+def handle_scene_description(scene_description, agent_service, gallery_data, image_generation_service=None):
+    """Handle scene description and generate objects with 2D prompts, then populate gallery with generated images."""
     if not scene_description.strip():
         return "Please enter a scene description.", gallery_data
     
@@ -50,21 +50,45 @@ def handle_scene_description(scene_description, agent_service, gallery_data):
                 print(f"    2D Prompt: {prompt}")
                 print()
                 
-                # Add to gallery data
-                new_gallery_data.append({
+                # Start with placeholder image
+                gallery_item = {
                     "title": obj_name,
-                    "path": "static/images/umbrella.png",  # Updated path
+                    "path": "static/images/umbrella.png",  # Placeholder
                     "description": prompt
-                })
+                }
+                new_gallery_data.append(gallery_item)
             
             print(f"Total objects: {len(prompts)}")
             print("=" * 60)
             
+            # Automatically generate images if image generation service is available
+            if image_generation_service:
+                print("🎨 Generating images for all objects...")
+                try:
+                    success, message, generated_images = image_generation_service.generate_images_for_objects(new_gallery_data)
+                    
+                    if success and generated_images:
+                        # Update gallery data with generated image paths
+                        for obj in new_gallery_data:
+                            object_name = obj["title"]
+                            if object_name in generated_images:
+                                obj["path"] = generated_images[object_name]
+                                print(f"✅ Generated image for {object_name}: {generated_images[object_name]}")
+                            else:
+                                print(f"⚠️ No image generated for {object_name}")
+                    else:
+                        print(f"❌ Image generation failed: {message}")
+                        
+                except Exception as e:
+                    print(f"❌ Error during image generation: {str(e)}")
+            
             # Create LLM-style response with count, subject reiteration, and suggested actions
-            response = f"{len(prompts)} objects generated for \"{scene_description}\"."
-            response += " Objects have been added to the gallery with 2D prompts."
-            response += " Review the objects and delete any that are not needed."
-            response += " Next step: Generate 3D assets for selected objects."
+            response = f"{len(prompts)} objects generated for \"{scene_description}\". "
+            response += "Objects have been added to the gallery with 2D prompts. "
+            if image_generation_service:
+                response += "Images have been automatically generated for all objects. "
+            response += "Review the objects and delete any that are not needed. "
+            response += "Next step: Generate 3D assets for selected objects."
             
             return response, new_gallery_data
         else:

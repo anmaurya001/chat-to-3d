@@ -54,16 +54,24 @@ def create_image_gallery():
             return delete_specific_card
 
         def shift_card_ui(gallery_data):
+            """Update the UI to reflect the current gallery data state."""
+            print(f"🔄 Updating gallery UI with {len(gallery_data)} objects")
             updates = []
             for idx in range(MAX_CARDS):
                 if idx < len(gallery_data):
-                    updates.append(gr.update(value=f"### {gallery_data[idx]['title']}"))
-                    updates.append(gr.update(value=gallery_data[idx]["path"]))
+                    obj = gallery_data[idx]
+                    print(f"  Card {idx}: {obj['title']} -> {obj['path']}")
+                    updates.append(gr.update(value=f"### {obj['title']}"))
+                    updates.append(gr.update(value=obj["path"]))
                 else:
                     updates.append(gr.update(value=""))
                     updates.append(gr.update(value=None))
+            
+            # Show/hide card containers based on data
             for idx in range(MAX_CARDS):
                 updates.append(gr.update(visible=(idx < len(gallery_data))))
+            
+            print(f"✅ Gallery UI updated with {len(gallery_data)} visible cards")
             return updates
         
         # Hook up event bindings for each card
@@ -84,5 +92,5 @@ def create_image_gallery():
         "card_components": card_components,
         "card_containers": card_containers,
         "get_all_card_outputs": get_all_card_outputs,
-        "shift_card_ui": shift_card_ui
+        "shift_card_ui": shift_card_ui,
     } 

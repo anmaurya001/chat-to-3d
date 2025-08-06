@@ -16,6 +16,7 @@ from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
 from services.agent_service import AgentService
 from services.scene_service import SceneService
+from services.image_generation_service import ImageGenerationService
 import config
 
 # Load custom CSS and JS
@@ -51,6 +52,7 @@ def create_app():
     # Initialize services
     agent_service = AgentService()
     scene_service = SceneService()
+    image_generation_service = ImageGenerationService()
     
     with gr.Blocks(
         title="Chat-to-3D", 
@@ -122,7 +124,7 @@ def create_app():
             if not scene_description.strip():
                 return "Please enter a scene description.", gallery_data
             
-            message, new_gallery_data = handle_scene_description(scene_description, agent_service, gallery_data)
+            message, new_gallery_data = handle_scene_description(scene_description, agent_service, gallery_data, image_generation_service)
             
             return message, new_gallery_data
         
