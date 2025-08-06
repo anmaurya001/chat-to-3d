@@ -101,23 +101,35 @@ def create_app():
                 status_components = create_status_panel()
         
         # Wire up the event handlers
-        def process_scene_description(scene_description):
-            """Process scene description and generate objects."""
-            response = handle_scene_description(scene_description, agent_service)
-            return response # Clear the input
+        def process_scene_description(scene_description, gallery_data):
+            """Process scene description and generate objects, then update gallery."""
+            if not scene_description.strip():
+                return "Please enter a scene description.", gallery_data
+            
+            message, new_gallery_data = handle_scene_description(scene_description, agent_service, gallery_data)
+            
+            return message, new_gallery_data
         
         # Connect send button to process scene description
         chat_components["send_btn"].click(
             fn=process_scene_description,
-            inputs=[chat_components["input"]],
-            outputs=[chat_components["input"]]
+            inputs=[chat_components["input"], gallery_components["data"]],
+            outputs=[chat_components["input"], gallery_components["data"]]
+        ).then(
+            fn=gallery_components["shift_card_ui"],
+            inputs=[gallery_components["data"]],
+            outputs=gallery_components["get_all_card_outputs"]()
         )
         
         # Connect Enter key for scene input
         chat_components["input"].submit(
             fn=process_scene_description,
-            inputs=[chat_components["input"]],
-            outputs=[chat_components["input"]]
+            inputs=[chat_components["input"], gallery_components["data"]],
+            outputs=[chat_components["input"], gallery_components["data"]]
+        ).then(
+            fn=gallery_components["shift_card_ui"],
+            inputs=[gallery_components["data"]],
+            outputs=gallery_components["get_all_card_outputs"]()
         )
         
         # Connect toggle button to show/hide right panel
