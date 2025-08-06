@@ -61,7 +61,7 @@ Last Updated: Just now""")
             with gr.Column(elem_classes=["scene-section"]):
                 gr.Markdown("### What scene do you want to create?")
                 with gr.Row():
-                    with gr.Column(scale=4):
+                    with gr.Column(scale=8):
                         scene_input = gr.Textbox(
                             placeholder="Describe your scene and any details you want to include...",
                             label="",
@@ -69,8 +69,8 @@ Last Updated: Just now""")
                             container=False,
                             elem_classes=["scene-input"]
                         )
-                    with gr.Column(scale=1):
-                        send_btn = gr.Button("▶", elem_classes=["send-button"])
+                    with gr.Column(scale=1, min_width=50):
+                        send_btn = gr.Button("▶", elem_classes=["send-button"], size="sm")
             
             # Object Gallery Section
             gr.Markdown("### Object gallery", elem_classes=["gallery-header"])

@@ -134,10 +134,17 @@
 .scene-input {
     border: 1px solid #e5e5e5;
     border-radius: 6px;
-    padding: 12px 16px;
+    /* padding: 12px 16px; */
     font-size: 14px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    height: 44px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.scene-input::placeholder {
+    text-align: center;
 }
 
 .scene-input:focus {
@@ -150,12 +157,16 @@
     background: #f3f4f6 !important;
     border: 1px solid #d1d5db !important;
     border-radius: 6px !important;
-    padding: 12px 16px !important;
+    padding: 8px 12px !important;
     font-size: 16px !important;
     color: #374151 !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
     min-width: 50px !important;
+    max-width: 70px !important;
+    width: 60px !important;
+    height: 44px !important;
+    box-sizing: border-box !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
