@@ -57,7 +57,7 @@ def create_image_gallery():
         def get_all_card_outputs():
             outputs = []
             for card in card_components:
-                outputs.extend([card["title_component"], card["image_component"], card["to_3d_btn"]])
+                outputs.extend([card["title_component"], card["image_component"], card["refresh_btn"], card["edit_btn"], card["delete_btn"], card["to_3d_btn"]])
             outputs.extend(card_containers)
             outputs.append(placeholder_container)  # Add placeholder to outputs
             return outputs
@@ -85,6 +85,30 @@ def create_image_gallery():
                     updates.append(gr.update(value=f"### {obj['title']}"))
                     updates.append(gr.update(value=obj["path"]))
                     
+                    # Check if 3D generation is in progress to disable other buttons
+                    is_3d_generating = obj.get("3d_generating", False)
+                    
+                    # Update refresh button state
+                    refresh_interactive = not is_3d_generating
+                    refresh_classes = ["action-btn"]
+                    if is_3d_generating:
+                        refresh_classes.append("disabled-btn")
+                    updates.append(gr.update(interactive=refresh_interactive, elem_classes=refresh_classes))
+                    
+                    # Update edit button state
+                    edit_interactive = not is_3d_generating
+                    edit_classes = ["action-btn"]
+                    if is_3d_generating:
+                        edit_classes.append("disabled-btn")
+                    updates.append(gr.update(interactive=edit_interactive, elem_classes=edit_classes))
+                    
+                    # Update delete button state
+                    delete_interactive = not is_3d_generating
+                    delete_classes = ["action-btn"]
+                    if is_3d_generating:
+                        delete_classes.append("disabled-btn")
+                    updates.append(gr.update(interactive=delete_interactive, elem_classes=delete_classes))
+                    
                     # Update 3D button text and state based on 3D model status
                     if "glb_path" in obj and obj["glb_path"]:
                         # 3D model exists - show completed state
@@ -106,7 +130,10 @@ def create_image_gallery():
                 else:
                     updates.append(gr.update(value=""))
                     updates.append(gr.update(value=None))
-                    updates.append(gr.update(value="→ 3D", interactive=True, elem_classes=["action-btn"]))
+                    updates.append(gr.update(interactive=True, elem_classes=["action-btn"]))  # refresh
+                    updates.append(gr.update(interactive=True, elem_classes=["action-btn"]))  # edit
+                    updates.append(gr.update(interactive=True, elem_classes=["action-btn"]))  # delete
+                    updates.append(gr.update(value="→ 3D", interactive=True, elem_classes=["action-btn"]))  # 3D
             
             # Show/hide card containers based on data
             for idx in range(MAX_CARDS):
