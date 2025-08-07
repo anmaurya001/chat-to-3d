@@ -327,24 +327,24 @@
 
 /* 3D button states */
 .action-btn.three-d-completed {
-    background-color: #15fd00b3 !important;
+    background-color: #5bcc51b3 !important;
     color: white !important;
     border-color: #059669 !important;
 }
 
 .action-btn.three-d-completed:hover {
-    background-color: #15fd00b3 !important;
+    background-color: #5bcc51b3 !important;
     transform: none !important;
 }
 
 .action-btn.three-d-generating {
-    background-color: #d8d3c8 !important;
+    background-color: #fdfdfd !important;
     color: white !important;
     border-color: #d8d3c8 !important;
 }
 
 .action-btn.three-d-generating:hover {
-    background-color: #d8d3c8 !important;
+    background-color: #fdfdfd !important;
     transform: none !important;
 }
 

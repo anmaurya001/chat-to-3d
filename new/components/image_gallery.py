@@ -15,6 +15,25 @@ def create_image_gallery():
         initial_gallery_data = []
         gallery_data = gr.State(initial_gallery_data)
         
+        # Create placeholder for empty gallery state
+        with gr.Column(visible=True, elem_classes=["gallery-placeholder"]) as placeholder_container:
+            with gr.Column(elem_classes=["placeholder-content"]):
+                gr.HTML(
+                    value="<div style='border: 2px solid #e0e0e0; border-radius: 8px; background-color: #f8f8f8; padding: 40px; text-align: center;'>"
+                          "<div style='display: flex; justify-content: center; align-items: center; margin-bottom: 20px;'>"
+                          "<svg width='48' height='48' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>"
+                          "<circle cx='12' cy='12' r='10' stroke='#ccc' stroke-width='2' fill='none'/>"
+                          "<path d='M12 16v-4' stroke='#ccc' stroke-width='2' stroke-linecap='round'/>"
+                          "<path d='M12 8h.01' stroke='#ccc' stroke-width='2' stroke-linecap='round'/>"
+                          "</svg>"
+                          "</div>"
+                          "<div style='color: #666; font-size: 16px; line-height: 1.5;'>"
+                          "First describe the scene you want above, and then we'll generate some ideas to populate the scene"
+                          "</div>"
+                          "</div>",
+                    elem_classes=["placeholder-text"]
+                )
+        
         # Create cards in a responsive grid using Gradio's native layout
         cards_per_row = 4  # Adjust this number to control cards per row
         card_components = []
@@ -40,6 +59,7 @@ def create_image_gallery():
             for card in card_components:
                 outputs.extend([card["title_component"], card["image_component"], card["to_3d_btn"]])
             outputs.extend(card_containers)
+            outputs.append(placeholder_container)  # Add placeholder to outputs
             return outputs
         
         # Logic functions
@@ -92,6 +112,9 @@ def create_image_gallery():
             for idx in range(MAX_CARDS):
                 updates.append(gr.update(visible=(idx < len(gallery_data))))
             
+            # Show/hide placeholder based on whether gallery has items
+            updates.append(gr.update(visible=(len(gallery_data) == 0)))
+            
             print(f"✅ Gallery UI updated with {len(gallery_data)} visible cards")
             return updates
         
@@ -112,6 +135,7 @@ def create_image_gallery():
         "data": gallery_data,
         "card_components": card_components,
         "card_containers": card_containers,
+        "placeholder": placeholder_container,
         "get_all_card_outputs": get_all_card_outputs,
         "shift_card_ui": shift_card_ui,
     } 
