@@ -14,6 +14,7 @@ from components.chat_interface import create_chat_interface, handle_scene_descri
 from components.image_gallery import create_image_gallery
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
+from components.image_card import create_refresh_handler
 from services.agent_service import AgentService
 from services.scene_service import SceneService
 from services.image_generation_service import ImageGenerationService
@@ -212,6 +213,26 @@ def create_app():
                 )
             else:
                 return (gr.update(visible=True), idx, "### Edit", "")
+        
+        # Create refresh handler
+        refresh_handler = create_refresh_handler(image_generation_service)
+        
+        # Wire up refresh button events for each card
+        for idx, card in enumerate(gallery_components["card_components"]):
+            def create_refresh_function(card_idx):
+                def refresh_specific_card(gallery_data):
+                    return refresh_handler(card_idx, gallery_data)
+                return refresh_specific_card
+            
+            card["refresh_btn"].click(
+                fn=create_refresh_function(idx),
+                inputs=[gallery_components["data"]],
+                outputs=[gallery_components["data"]]
+            ).then(
+                fn=gallery_components["shift_card_ui"],
+                inputs=[gallery_components["data"]],
+                outputs=gallery_components["get_all_card_outputs"]()
+            )
         
         # Wire up edit button events for each card
         for idx, card in enumerate(gallery_components["card_components"]):

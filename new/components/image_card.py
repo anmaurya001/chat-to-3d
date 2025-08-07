@@ -1,4 +1,7 @@
 import gradio as gr
+import random
+import os
+from services.image_generation_service import ImageGenerationService
 
 def create_image_card(image_path, title, output_widget, modal_image_title, modal_image, modal_visible, settings_modal, overlay):
     """Create a single image card with action buttons and modal trigger."""
@@ -37,4 +40,58 @@ def create_image_card(image_path, title, output_widget, modal_image_title, modal
         "edit_btn": edit_btn,
         "delete_btn": delete_btn,
         "to_3d_btn": to_3d_btn
-    } 
+    }
+
+def create_refresh_handler(image_generation_service):
+    """Create a refresh handler that generates a new image with a random seed."""
+    def refresh_image(card_idx, gallery_data):
+        """Refresh the image for a specific card with a new random seed."""
+        try:
+            if card_idx >= len(gallery_data):
+                print(f"Card index {card_idx} out of range")
+                return gallery_data
+            
+            # Get the current object data
+            obj = gallery_data[card_idx]
+            object_name = obj["title"]
+            prompt = obj["description"]
+            
+            # Validate that we have the required data
+            if not object_name or not prompt:
+                print(f"❌ Missing required data for card {card_idx}: title='{object_name}', prompt='{prompt}'")
+                return gallery_data
+            
+            # Generate a new random seed
+            new_seed = random.randint(1, 999999)
+            
+            # Set output directory for generated images
+            output_dir = "static/images/generated"
+            
+            print(f"🔄 Refreshing image for '{object_name}' with seed {new_seed}")
+            print(f"   Prompt: {prompt}")
+            
+            # Generate new image using SANA service
+            success, message, new_image_path = image_generation_service.generate_image_from_prompt(
+                object_name=object_name,
+                prompt=prompt,
+                output_dir=output_dir,
+                seed=new_seed
+            )
+            
+            if success and new_image_path:
+                # Update the gallery data with the new image path
+                updated_data = gallery_data.copy()
+                updated_data[card_idx]["path"] = new_image_path
+                updated_data[card_idx]["seed"] = new_seed
+                
+                print(f"✅ Successfully refreshed image: {new_image_path}")
+                return updated_data
+            else:
+                print(f"❌ Failed to refresh image: {message}")
+                return gallery_data
+                
+        except Exception as e:
+            print(f"❌ Error refreshing image: {str(e)}")
+            return gallery_data
+    
+    return refresh_image 

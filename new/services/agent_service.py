@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 AGENT_MODEL = "meta/llama-3.1-8b-instruct"
-AGENT_BASE_URL = "http://localhost:8000/v1"
+AGENT_BASE_URL = "http://localhost:19002/v1"
 MAX_PROMPT_LENGTH = 50
 
 
