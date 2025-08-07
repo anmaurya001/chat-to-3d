@@ -51,18 +51,23 @@ class LLMAgent:
         """Get rules for 2D prompt generation phase."""
         return [
             Rule("You are now in 2D prompt generation mode. Your task is to create detailed prompts for each object in the scene."),
-            Rule("Each prompt MUST start with the object type followed by a comma, then describe its characteristics."),
             Rule("The descriptions should be highly detailed and visually rich, suitable for a text-to-image generation model."),
             Rule("The prompt must specify a plain or empty background (e.g., 'on a white background', 'isolated', 'no background')."),
             Rule("Focus ONLY on the physical and visual characteristics of each object itself."),
             Rule("Keep each object's prompt to exactly 30 words or less for optimal generation quality."),
             Rule("Generate a separate prompt for each object in the scene."),
             Rule("Format each object's prompt with 'Object:' and 'Prompt:' labels."),
+            Rule("Do not add any explanatory notes or comments after the prompt."),
+            Rule("Do not use asterisks or any special formatting characters."),
+            Rule("Output only the Object and Prompt labels with clean text - no additional formatting or notes."),
             Rule(
-                "The first word of each prompt MUST be the object type, followed by a comma."
-                "\nExample: 'Beach Chair, ergonomic with...'"
-                "\nExample: 'Beach Umbrella, colorful with...'"
-                "\nExample: 'Beach Towel, soft and plush...'"
+                "The prompt text should describe the object's visual characteristics in detail."
+                "\nExample:"
+                "\nObject: Beach Chair"
+                "\nPrompt: A comfortable beach chair with ergonomic design and colorful fabric, on a white background"
+                "\nExample:"
+                "\nObject: Beach Umbrella"
+                "\nPrompt: A vibrant beach umbrella with colorful stripes and sturdy metal frame, on a white background"
             ),
         ]
     
