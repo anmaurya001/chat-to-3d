@@ -53,7 +53,7 @@ def handle_scene_description(scene_description, agent_service, gallery_data, ima
                 # Start with placeholder image
                 gallery_item = {
                     "title": obj_name,
-                    "path": "static/images/umbrella.png",  # Placeholder
+                    "path": None,
                     "description": prompt
                 }
                 new_gallery_data.append(gallery_item)
@@ -83,11 +83,11 @@ def handle_scene_description(scene_description, agent_service, gallery_data, ima
                     print(f"❌ Error during image generation: {str(e)}")
             
             # Create LLM-style response with count, subject reiteration, and suggested actions
-            response = f"{len(prompts)} objects generated for \"{scene_description}\". "
-            response += "Objects have been added to the gallery with 2D prompts. "
-            if image_generation_service:
-                response += "Images have been automatically generated for all objects. "
-            response += "Review the objects and delete any that are not needed. "
+            # response = f"{len(prompts)} objects generated for \"{scene_description}\". "
+            # response += "Objects have been added to the gallery with 2D prompts. "
+            # if image_generation_service:
+            #     response += "Images have been automatically generated for all objects. "
+            response = f"Review the {len(prompts)} objects and delete any that are not needed. "
             response += "Next step: Generate 3D assets for selected objects."
             
             return response, new_gallery_data

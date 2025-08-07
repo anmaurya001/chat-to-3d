@@ -327,25 +327,38 @@
 
 /* 3D button states */
 .action-btn.three-d-completed {
-    background-color: #5bcc51b3 !important;
+    background-color: #00ff00 !important;
     color: white !important;
-    border-color: #059669 !important;
+    border-color: #00cc00 !important;
+    opacity: 1 !important;
+    filter: none !important;
 }
 
 .action-btn.three-d-completed:hover {
-    background-color: #5bcc51b3 !important;
+    background-color: #00cc00 !important;
     transform: none !important;
+    opacity: 1 !important;
+}
+
+.action-btn.three-d-completed:disabled {
+    background-color: #00ff00 !important;
+    color: white !important;
+    border-color: #00cc00 !important;
+    opacity: 1 !important;
+    filter: none !important;
 }
 
 .action-btn.three-d-generating {
-    background-color: #fdfdfd !important;
-    color: white !important;
-    border-color: #d8d3c8 !important;
+    background-color: #ffd700 !important;
+    color: #333 !important;
+    border-color: #ffb700 !important;
+    opacity: 1 !important;
 }
 
 .action-btn.three-d-generating:hover {
-    background-color: #fdfdfd !important;
+    background-color: #ffb700 !important;
     transform: none !important;
+    opacity: 1 !important;
 }
 
 @media (max-width: 768px) {

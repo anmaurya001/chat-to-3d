@@ -233,7 +233,7 @@ def create_app():
             """Update modal 3D components based on 3D model availability."""
             if card_idx < len(gallery_data):
                 obj = gallery_data[card_idx]
-                if "glb_path" in obj and obj["glb_path"] and os.path.exists(obj["glb_path"]):
+                if obj.get("glb_path") and os.path.exists(obj["glb_path"]):
                     return gr.update(value=obj["glb_path"], visible=True), gr.update(visible=False)
                 else:
                     return gr.update(value=None, visible=False), gr.update(visible=True)
@@ -336,6 +336,10 @@ def create_app():
                 
                 # Update the description
                 updated_data[edit_idx]["description"] = new_description.strip()
+
+                if gallery_data[edit_idx]["description"] == updated_data[edit_idx]["description"] :
+                    print(f"❌ No change in description for card {edit_idx}")
+                    return gallery_data
                 
                 # Generate a new random seed for the updated prompt
                 import random

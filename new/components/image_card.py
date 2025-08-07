@@ -67,7 +67,7 @@ def create_refresh_handler(image_generation_service):
             new_seed = random.randint(1, 999999)
             
             # Set output directory for generated images
-            output_dir = "static/images/generated"
+            output_dir = os.path.join(os.path.dirname(__file__), "..", "static", "images", "generated")
             
             print(f"🔄 Refreshing image for '{object_name}' with seed {new_seed}")
             print(f"   Prompt: {prompt}")
@@ -118,18 +118,18 @@ def create_3d_generation_handler(model_3d_service):
                 return gallery_data
             
             # Check if 3D model already exists
-            if "glb_path" in obj and obj["glb_path"]:
+            if obj.get("glb_path"):
                 print(f"✅ 3D model already exists for '{object_name}': {obj['glb_path']}")
                 return gallery_data
             
             # Check if generation is already in progress (should be true from immediate update)
-            if "3d_generating" in obj and obj["3d_generating"]:
+            if obj.get("3d_generating"):
                 print(f"⏳ 3D generation in progress for '{object_name}' - continuing...")
             else:
                 print(f"⚠️ 3D generation not marked as in progress, but continuing...")
             
             # Set output directory for generated 3D models
-            output_dir = "assets/models"
+            output_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "models")
               
             # Generate 3D model using Model3DService
             success, message, glb_path = model_3d_service.generate_3d_model(
@@ -152,12 +152,10 @@ def create_3d_generation_handler(model_3d_service):
                 # Mark generation as failed
                 updated_data[card_idx]["3d_generating"] = False
                 print(f"❌ Failed to generate 3D model: {message}")
-                print(f"🔍 DEBUG: Generation failed, reset 3d_generating=False for card {card_idx}")
                 return updated_data
                 
         except Exception as e:
             print(f"❌ Error generating 3D model: {str(e)}")
-            print(f"🔍 DEBUG: Exception occurred, resetting 3d_generating=False for card {card_idx}")
             # Mark generation as failed
             updated_data = gallery_data.copy()
             updated_data[card_idx]["3d_generating"] = False
