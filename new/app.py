@@ -14,10 +14,11 @@ from components.chat_interface import create_chat_interface, handle_scene_descri
 from components.image_gallery import create_image_gallery
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
-from components.image_card import create_refresh_handler
+from components.image_card import create_refresh_handler, create_3d_generation_handler
 from services.agent_service import AgentService
 from services.scene_service import SceneService
 from services.image_generation_service import ImageGenerationService
+from services.model_3d_service import Model3DService
 import config
 
 # Load custom CSS and JS
@@ -54,6 +55,7 @@ def create_app():
     agent_service = AgentService()
     scene_service = SceneService()
     image_generation_service = ImageGenerationService()
+    model_3d_service = Model3DService()
     
     with gr.Blocks(
         title="Chat-to-3D", 
@@ -107,7 +109,7 @@ def create_app():
                 """)
                 
                 # Modal components
-                settings_modal, modal_image_title, close_btn, modal_image, modal_3d = create_modal()
+                settings_modal, modal_image_title, close_btn, modal_image, modal_3d, no_3d_message = create_modal()
                 settings_modal.visible = False
                 
                 # Edit modal components
@@ -164,9 +166,9 @@ def create_app():
         )
         
         # Modal functionality
-        def debug_card_click(path, title):
-            print(f"DEBUG: Card clicked! Path: {path}, Title: {title}")
-            return open_image_settings(path, title)
+        def debug_card_click(path, title, gallery_data, card_idx):
+            print(f"DEBUG: Card clicked! Path: {path}, Title: {title}, Card Index: {card_idx}")
+            return open_image_settings(path, title, gallery_data, card_idx)
         
         # Wire up card click events for modal
         for idx, card in enumerate(gallery_components["card_components"]):
@@ -175,29 +177,36 @@ def create_app():
                     if card_idx < len(gallery_data):
                         item = gallery_data[card_idx]
                         print(f"DEBUG: Dynamic click for card {card_idx}: {item['title']}")
-                        return debug_card_click(item["path"], item["title"])
+                        return debug_card_click(item["path"], item["title"], gallery_data, card_idx)
                     else:
                         print(f"DEBUG: Card {card_idx} not found in gallery_data")
-                        return debug_card_click("", "")
+                        return debug_card_click("", "", gallery_data, card_idx)
                 return click_handler
             
             card["card_click_btn"].click(
                 fn=create_dynamic_click_handler(idx),
                 inputs=[gallery_components["data"]],
-                outputs=[modal_image_title, modal_image, modal_visible, overlay]
+                outputs=[modal_image_title, modal_image, modal_visible, overlay, modal_3d]
             ).then(
                 fn=lambda: gr.update(visible=True),
                 outputs=[settings_modal]
+            ).then(
+                fn=lambda glb_path: (gr.update(visible=(glb_path is not None)), gr.update(visible=(glb_path is None))),
+                inputs=[modal_3d],
+                outputs=[modal_3d, no_3d_message]
             )
         
         # Close modal button
         close_btn.click(
             fn=close_modal,
             inputs=[],
-            outputs=[modal_image_title, modal_image, modal_visible, overlay]
+            outputs=[modal_image_title, modal_image, modal_visible, overlay, modal_3d]
         ).then(
             fn=lambda: gr.update(visible=False),
             outputs=[settings_modal]
+        ).then(
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
+            outputs=[modal_3d, no_3d_message]
         )
         
         # Edit modal functionality
@@ -217,6 +226,20 @@ def create_app():
         # Create refresh handler
         refresh_handler = create_refresh_handler(image_generation_service)
         
+        # Create 3D generation handler
+        three_d_handler = create_3d_generation_handler(model_3d_service)
+        
+        def update_modal_3d_components(gallery_data, card_idx):
+            """Update modal 3D components based on 3D model availability."""
+            if card_idx < len(gallery_data):
+                obj = gallery_data[card_idx]
+                if "glb_path" in obj and obj["glb_path"] and os.path.exists(obj["glb_path"]):
+                    return gr.update(value=obj["glb_path"], visible=True), gr.update(visible=False)
+                else:
+                    return gr.update(value=None, visible=False), gr.update(visible=True)
+            else:
+                return gr.update(value=None, visible=False), gr.update(visible=True)
+        
         # Wire up refresh button events for each card
         for idx, card in enumerate(gallery_components["card_components"]):
             def create_refresh_function(card_idx):
@@ -232,6 +255,56 @@ def create_app():
                 fn=gallery_components["shift_card_ui"],
                 inputs=[gallery_components["data"]],
                 outputs=gallery_components["get_all_card_outputs"]()
+            )
+        
+        # Wire up 3D generation button events for each card
+        for idx, card in enumerate(gallery_components["card_components"]):
+            def create_3d_function(card_idx):
+                def generate_3d_for_card(gallery_data):
+                    # Immediately update the button to show "generating" state
+                    if card_idx < len(gallery_data):
+                        # Create a copy and mark as generating
+                        updated_data = gallery_data.copy()
+                        updated_data[card_idx]["3d_generating"] = True
+                        print(f"🔍 DEBUG: Set 3d_generating=True for card {card_idx}")
+                        
+                        # Return the updated data immediately to show "⏳ 3D..." state
+                        return updated_data
+                    else:
+                        print(f"🔍 DEBUG: Card index {card_idx} out of range")
+                        return gallery_data
+                
+                def perform_3d_generation(gallery_data):
+                    print(f"🔍 DEBUG: Performing actual 3D generation for card {card_idx}")
+                    result = three_d_handler(card_idx, gallery_data)
+                    return result
+                
+                return generate_3d_for_card, perform_3d_generation
+            
+            # Create the functions for this specific card
+            immediate_update_fn, generation_fn = create_3d_function(idx)
+            
+            # First click: immediate UI update
+            card["to_3d_btn"].click(
+                fn=immediate_update_fn,
+                inputs=[gallery_components["data"]],
+                outputs=[gallery_components["data"]]
+            ).then(
+                fn=gallery_components["shift_card_ui"],
+                inputs=[gallery_components["data"]],
+                outputs=gallery_components["get_all_card_outputs"]()
+            ).then(
+                fn=generation_fn,
+                inputs=[gallery_components["data"]],
+                outputs=[gallery_components["data"]]
+            ).then(
+                fn=gallery_components["shift_card_ui"],
+                inputs=[gallery_components["data"]],
+                outputs=gallery_components["get_all_card_outputs"]()
+            ).then(
+                fn=lambda data, idx=idx: update_modal_3d_components(data, idx),
+                inputs=[gallery_components["data"]],
+                outputs=[modal_3d, no_3d_message]
             )
         
         # Wire up edit button events for each card

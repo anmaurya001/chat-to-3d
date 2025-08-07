@@ -306,12 +306,48 @@
 }
 
 .action-btn:hover {
-    background: #f0f0f0 !important;
-    border-color: #d0d0d0 !important;
+    background-color: #f3f4f6;
     transform: scale(1.05);
+    transition: all 0.2s ease;
 }
 
-/* Responsive adjustments */
+.action-btn:disabled {
+    opacity: 1.0;
+    cursor: not-allowed;
+    background-color: #f9fafb !important;
+    color: #9ca3af !important;
+    border-color: #e5e7eb !important;
+    transform: none !important;
+}
+
+.action-btn:disabled:hover {
+    background-color: #f9fafb !important;
+    transform: none !important;
+}
+
+/* 3D button states */
+.action-btn.three-d-completed {
+    background-color: #36982db3 !important;
+    color: white !important;
+    border-color: #059669 !important;
+}
+
+.action-btn.three-d-completed:hover {
+    background-color: #36982db3 !important;
+    transform: none !important;
+}
+
+.action-btn.three-d-generating {
+    background-color: #f59e0b !important;
+    color: white !important;
+    border-color: #d97706 !important;
+}
+
+.action-btn.three-d-generating:hover {
+    background-color: #d97706 !important;
+    transform: none !important;
+}
+
 @media (max-width: 768px) {
     .gallery-card {
         min-height: 240px;

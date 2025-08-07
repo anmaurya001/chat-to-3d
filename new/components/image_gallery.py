@@ -38,7 +38,7 @@ def create_image_gallery():
         def get_all_card_outputs():
             outputs = []
             for card in card_components:
-                outputs.extend([card["title_component"], card["image_component"]])
+                outputs.extend([card["title_component"], card["image_component"], card["to_3d_btn"]])
             outputs.extend(card_containers)
             return outputs
         
@@ -61,11 +61,32 @@ def create_image_gallery():
                 if idx < len(gallery_data):
                     obj = gallery_data[idx]
                     print(f"  Card {idx}: {obj['title']} -> {obj['path']}")
+                    
                     updates.append(gr.update(value=f"### {obj['title']}"))
                     updates.append(gr.update(value=obj["path"]))
+                    
+                    # Update 3D button text and state based on 3D model status
+                    if "glb_path" in obj and obj["glb_path"]:
+                        # 3D model exists - show completed state
+                        button_text = "✓ 3D"
+                        button_interactive = False
+                        button_classes = ["action-btn", "three-d-completed"]
+                    elif "3d_generating" in obj and obj["3d_generating"]:
+                        # 3D generation in progress
+                        button_text = "⏳ 3D..."
+                        button_interactive = False
+                        button_classes = ["action-btn", "three-d-generating"]
+                    else:
+                        # No 3D model - ready to generate
+                        button_text = "→ 3D"
+                        button_interactive = True
+                        button_classes = ["action-btn"]
+                    
+                    updates.append(gr.update(value=button_text, interactive=button_interactive, elem_classes=button_classes))
                 else:
                     updates.append(gr.update(value=""))
                     updates.append(gr.update(value=None))
+                    updates.append(gr.update(value="→ 3D", interactive=True, elem_classes=["action-btn"]))
             
             # Show/hide card containers based on data
             for idx in range(MAX_CARDS):
