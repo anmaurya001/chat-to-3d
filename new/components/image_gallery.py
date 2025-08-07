@@ -117,7 +117,7 @@ def create_image_gallery():
                         button_classes = ["action-btn", "three-d-completed"]
                     elif "3d_generating" in obj and obj["3d_generating"]:
                         # 3D generation in progress
-                        button_text = "⏳ 3D..."
+                        button_text = "⏳ 3D"
                         button_interactive = False
                         button_classes = ["action-btn", "three-d-generating"]
                     else:

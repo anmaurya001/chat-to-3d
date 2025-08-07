@@ -14,7 +14,7 @@ from components.chat_interface import create_chat_interface, handle_scene_descri
 from components.image_gallery import create_image_gallery
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
-from components.image_card import create_refresh_handler, create_3d_generation_handler
+from components.image_card import create_refresh_handler, create_3d_generation_handler, invalidate_3d_model
 from services.agent_service import AgentService
 from services.scene_service import SceneService
 from services.image_generation_service import ImageGenerationService
@@ -337,9 +337,9 @@ def create_app():
                 # Update the description
                 updated_data[edit_idx]["description"] = new_description.strip()
 
-                if gallery_data[edit_idx]["description"] == updated_data[edit_idx]["description"] :
-                    print(f"❌ No change in description for card {edit_idx}")
-                    return gallery_data
+                # if gallery_data[edit_idx]["description"] == updated_data[edit_idx]["description"] :
+                #     print(f"❌ No change in description for card {edit_idx}")
+                #     return gallery_data
                 
                 # Generate a new random seed for the updated prompt
                 import random
@@ -349,7 +349,7 @@ def create_app():
                 print(f"   New prompt: {new_description}")
                 
                 # Generate new image using SANA service with the updated prompt
-                output_dir = "static/images/generated"
+                output_dir = os.path.join(os.path.dirname(__file__), "static", "images", "generated")
                 success, message, new_image_path = image_generation_service.generate_image_from_prompt(
                     object_name=object_name,
                     prompt=new_description.strip(),
@@ -361,6 +361,10 @@ def create_app():
                     # Update the image path and seed
                     updated_data[edit_idx]["path"] = new_image_path
                     updated_data[edit_idx]["seed"] = new_seed
+                    
+                    # Invalidate 3D model using the helper function
+                    updated_data = invalidate_3d_model(updated_data, edit_idx, object_name, "image update")
+                    
                     print(f"✅ Successfully generated new image: {new_image_path}")
                 else:
                     print(f"❌ Failed to generate new image: {message}")

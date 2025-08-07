@@ -5,6 +5,27 @@ from services.image_generation_service import ImageGenerationService
 from services.model_3d_service import Model3DService
 import datetime
 
+def invalidate_3d_model(gallery_data, card_idx, object_name, context="image change"):
+    """Invalidate any existing 3D model for a card when the image has changed."""
+    updated_data = gallery_data.copy()
+    
+    # Invalidate any existing 3D model since the image has changed
+    if "glb_path" in updated_data[card_idx]:
+        print(f"🗑️ Invalidating existing 3D model for '{object_name}' due to {context}")
+        del updated_data[card_idx]["glb_path"]
+    
+    if "3d_generated" in updated_data[card_idx]:
+        del updated_data[card_idx]["3d_generated"]
+    
+    if "3d_timestamp" in updated_data[card_idx]:
+        del updated_data[card_idx]["3d_timestamp"]
+    
+    # Reset 3D generation state to allow new generation
+    updated_data[card_idx]["3d_generating"] = False
+    
+    print(f"🔄 3D model invalidated - '→ 3D' button re-enabled")
+    return updated_data
+
 def create_image_card(image_path, title, output_widget, modal_image_title, modal_image, modal_visible, settings_modal, overlay):
     """Create a single image card with action buttons and modal trigger."""
     with gr.Column(elem_classes=["card-content", "clickable-card"]):
@@ -85,6 +106,9 @@ def create_refresh_handler(image_generation_service):
                 updated_data = gallery_data.copy()
                 updated_data[card_idx]["path"] = new_image_path
                 updated_data[card_idx]["seed"] = new_seed
+                
+                # Invalidate 3D model using the helper function
+                updated_data = invalidate_3d_model(updated_data, card_idx, object_name, "image refresh")
                 
                 print(f"✅ Successfully refreshed image: {new_image_path}")
                 return updated_data
