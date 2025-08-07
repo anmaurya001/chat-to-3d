@@ -250,10 +250,44 @@ def create_app():
         
         # Update edit button
         def update_object_description(edit_idx, new_description, gallery_data):
-            """Update the description of an object in the gallery."""
+            """Update the description of an object in the gallery and generate a new image."""
             if edit_idx is not None and edit_idx < len(gallery_data):
+                # Validate the new description
+                if not new_description or not new_description.strip():
+                    print(f"❌ Empty description provided for card {edit_idx}")
+                    return gallery_data
+                
                 updated_data = gallery_data.copy()
-                updated_data[edit_idx]["description"] = new_description
+                obj = updated_data[edit_idx]
+                object_name = obj["title"]
+                
+                # Update the description
+                updated_data[edit_idx]["description"] = new_description.strip()
+                
+                # Generate a new random seed for the updated prompt
+                import random
+                new_seed = random.randint(1, 999999)
+                
+                print(f"🔄 Updating image for '{object_name}' with new prompt and seed {new_seed}")
+                print(f"   New prompt: {new_description}")
+                
+                # Generate new image using SANA service with the updated prompt
+                output_dir = "static/images/generated"
+                success, message, new_image_path = image_generation_service.generate_image_from_prompt(
+                    object_name=object_name,
+                    prompt=new_description.strip(),
+                    output_dir=output_dir,
+                    seed=new_seed
+                )
+                
+                if success and new_image_path:
+                    # Update the image path and seed
+                    updated_data[edit_idx]["path"] = new_image_path
+                    updated_data[edit_idx]["seed"] = new_seed
+                    print(f"✅ Successfully generated new image: {new_image_path}")
+                else:
+                    print(f"❌ Failed to generate new image: {message}")
+                
                 return updated_data
             return gallery_data
         
