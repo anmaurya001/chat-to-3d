@@ -12,7 +12,7 @@ import os
 import base64
 from components.chat_interface import create_chat_interface, handle_scene_description
 from components.image_gallery import create_image_gallery
-from components.blender_export import create_blender_export_section
+from components.blender_export import create_blender_export_section, update_export_section, export_3d_assets
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
 from components.image_card import create_refresh_handler, create_3d_generation_handler, create_convert_all_3d_handler, invalidate_3d_model
@@ -103,6 +103,9 @@ def create_app():
                 # Blender export section
                 export_components = create_blender_export_section()
                 
+                # Export status textbox
+                export_status = gr.Textbox(label="Export Status", interactive=False, visible=False)
+                
                 # Modal UI
                 modal_visible = gr.State(False)
                 overlay = gr.HTML("""
@@ -141,6 +144,10 @@ def create_app():
             fn=gallery_components["shift_card_ui"],
             inputs=[gallery_components["data"]],
             outputs=gallery_components["get_all_card_outputs"]()
+        ).then(
+            fn=update_export_section,
+            inputs=[gallery_components["data"]],
+            outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
         )
         
         # Connect Enter key for scene input
@@ -152,6 +159,10 @@ def create_app():
             fn=gallery_components["shift_card_ui"],
             inputs=[gallery_components["data"]],
             outputs=gallery_components["get_all_card_outputs"]()
+        ).then(
+            fn=update_export_section,
+            inputs=[gallery_components["data"]],
+            outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
         )
         
         # Connect toggle button to show/hide right panel
@@ -259,6 +270,10 @@ def create_app():
                 fn=gallery_components["shift_card_ui"],
                 inputs=[gallery_components["data"]],
                 outputs=gallery_components["get_all_card_outputs"]()
+            ).then(
+                fn=update_export_section,
+                inputs=[gallery_components["data"]],
+                outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
             )
         
         # Wire up 3D generation button events for each card
@@ -305,6 +320,10 @@ def create_app():
                 fn=gallery_components["shift_card_ui"],
                 inputs=[gallery_components["data"]],
                 outputs=gallery_components["get_all_card_outputs"]()
+            ).then(
+                fn=update_export_section,
+                inputs=[gallery_components["data"]],
+                outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
             ).then(
                 fn=lambda data, idx=idx: update_modal_3d_components(data, idx),
                 inputs=[gallery_components["data"]],
@@ -388,6 +407,10 @@ def create_app():
             inputs=[gallery_components["data"]],
             outputs=gallery_components["get_all_card_outputs"]()
         ).then(
+            fn=update_export_section,
+            inputs=[gallery_components["data"]],
+            outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
+        ).then(
             fn=lambda: (gr.update(visible=False), None, "", ""),
             outputs=[edit_modal, edit_current_index, edit_image_title, edit_description]
         )
@@ -409,6 +432,20 @@ def create_app():
             fn=gallery_components["shift_card_ui"],
             inputs=[gallery_components["data"]],
             outputs=gallery_components["get_all_card_outputs"]()
+        ).then(
+            fn=update_export_section,
+            inputs=[gallery_components["data"]],
+            outputs=[export_components["count_display"], export_components["thumbnails_container"], export_components["export_btn"], export_components["placeholder"], export_components["export_content_active"]]
+        )
+        
+        # Wire up export button
+        export_components["export_btn"].click(
+            fn=export_3d_assets,
+            inputs=[gallery_components["data"]],
+            outputs=[export_status]
+        ).then(
+            fn=lambda: gr.update(visible=True),
+            outputs=[export_status]
         )
         
     return app
