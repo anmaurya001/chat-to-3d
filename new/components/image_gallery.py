@@ -61,7 +61,8 @@ def create_image_gallery():
                 #size="lg", 
                 #variant="primary",
                 elem_classes=["convert-all-btn"],
-                visible=False  # Initially hidden, will be shown when gallery has items
+                visible=False,  # Initially hidden, will be shown when gallery has items
+                interactive=False  # Initially disabled, will be enabled when there are unconverted items
             )
         
         # Utility: get all card outputs
@@ -161,8 +162,10 @@ def create_image_gallery():
             # Show/hide placeholder based on whether gallery has items
             updates.append(gr.update(visible=(len(gallery_data) == 0)))
             
-            # Show/hide convert all button based on whether there are unconverted items
+            # Show/enable convert all button based on whether there are items and unconverted items
             # and whether batch processing is in progress
+            has_items = len(gallery_data) > 0
+            
             has_unconverted_items = any(
                 idx < len(gallery_data) and 
                 not gallery_data[idx].get("glb_path") and 
@@ -177,9 +180,10 @@ def create_image_gallery():
                 for idx in range(len(gallery_data))
             )
             
-            # Show button only if there are unconverted items and no batch processing
-            show_convert_all = has_unconverted_items and not is_batch_processing
-            updates.append(gr.update(visible=show_convert_all))
+            # Show button if there are items, enable if there are unconverted items and no batch processing
+            show_convert_all = has_items
+            enable_convert_all = has_unconverted_items and not is_batch_processing
+            updates.append(gr.update(visible=show_convert_all, interactive=enable_convert_all))
             
             print(f"✅ Gallery UI updated with {len(gallery_data)} visible cards")
             return updates
