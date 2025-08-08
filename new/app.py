@@ -14,7 +14,7 @@ from components.chat_interface import create_chat_interface, handle_scene_descri
 from components.image_gallery import create_image_gallery
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
-from components.image_card import create_refresh_handler, create_3d_generation_handler, invalidate_3d_model
+from components.image_card import create_refresh_handler, create_3d_generation_handler, create_convert_all_3d_handler, invalidate_3d_model
 from services.agent_service import AgentService
 from services.scene_service import SceneService
 from services.image_generation_service import ImageGenerationService
@@ -23,9 +23,9 @@ import config
 
 # Load custom CSS and JS
 try:
-    with open(os.path.join("static", "css", "custom.css")) as f:
+    with open(config.CUSTOM_CSS_FILE) as f:
         custom_css = f.read()
-    with open(os.path.join("static", "js", "custom.js")) as f:
+    with open(config.CUSTOM_JS_FILE) as f:
         custom_js = f.read()
 except FileNotFoundError:
     print("Custom CSS and JS not found")
@@ -34,7 +34,7 @@ except FileNotFoundError:
 
 # Load NVIDIA logo
 try:
-    with open("./static/images/nvidia_logo.png", "rb") as image_file:
+    with open(config.NVIDIA_LOGO_FILE, "rb") as image_file:
         encoded = base64.b64encode(image_file.read()).decode()
     
     nvidia_html = f"""<div class='nvidia-logo-container'> 
@@ -62,9 +62,6 @@ def create_app():
         # css_paths=["static/css/custom.css"]
     ) as app:
         
-        # Global state
-        scene_state = gr.State({"objects": [], "description": ""})
-        status_state = gr.State("System ready")
         
         # Inject custom CSS and JS
         gr.HTML(f"<style>{custom_css}</style>")
@@ -229,6 +226,9 @@ def create_app():
         # Create 3D generation handler
         three_d_handler = create_3d_generation_handler(model_3d_service)
         
+        # Create convert all to 3D handler
+        convert_all_handler = create_convert_all_3d_handler(model_3d_service)
+        
         def update_modal_3d_components(gallery_data, card_idx):
             """Update modal 3D components based on 3D model availability."""
             if card_idx < len(gallery_data):
@@ -349,11 +349,10 @@ def create_app():
                 print(f"   New prompt: {new_description}")
                 
                 # Generate new image using SANA service with the updated prompt
-                output_dir = os.path.join(os.path.dirname(__file__), "static", "images", "generated")
                 success, message, new_image_path = image_generation_service.generate_image_from_prompt(
                     object_name=object_name,
                     prompt=new_description.strip(),
-                    output_dir=output_dir,
+                    output_dir=config.GENERATED_IMAGES_DIR,
                     seed=new_seed
                 )
                 
@@ -383,6 +382,17 @@ def create_app():
         ).then(
             fn=lambda: (gr.update(visible=False), None, "", ""),
             outputs=[edit_modal, edit_current_index, edit_image_title, edit_description]
+        )
+        
+        # Wire up convert all to 3D button
+        gallery_components["convert_all_btn"].click(
+            fn=convert_all_handler,
+            inputs=[gallery_components["data"]],
+            outputs=[gallery_components["data"]]
+        ).then(
+            fn=gallery_components["shift_card_ui"],
+            inputs=[gallery_components["data"]],
+            outputs=gallery_components["get_all_card_outputs"]()
         )
         
     return app

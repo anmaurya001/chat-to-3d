@@ -67,5 +67,5 @@ def create_edit_modal():
         )
         with gr.Row():
             cancel_btn = gr.Button("Cancel", elem_id="cancel-edit-btn", variant="secondary")
-            update_btn = gr.Button("Update & Generate", elem_id="update-edit-btn", variant="primary")
+            update_btn = gr.Button("Update & Generate", elem_id="update-edit-btn", variant="secondary")
     return edit_modal, edit_image_title, edit_description, cancel_btn, update_btn 

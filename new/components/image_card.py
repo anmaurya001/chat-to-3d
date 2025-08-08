@@ -4,6 +4,7 @@ import os
 from services.image_generation_service import ImageGenerationService
 from services.model_3d_service import Model3DService
 import datetime
+import config
 
 def invalidate_3d_model(gallery_data, card_idx, object_name, context="image change"):
     """Invalidate any existing 3D model for a card when the image has changed."""
@@ -25,6 +26,78 @@ def invalidate_3d_model(gallery_data, card_idx, object_name, context="image chan
     
     print(f"🔄 3D model invalidated - '→ 3D' button re-enabled")
     return updated_data
+
+def create_convert_all_3d_handler(model_3d_service):
+    """Create a handler that converts all unconverted images to 3D models."""
+    def convert_all_to_3d(gallery_data):
+        """Convert all images that haven't been converted to 3D yet."""
+        try:
+            if not gallery_data:
+                print("❌ No gallery data to process")
+                return gallery_data
+            
+            updated_data = gallery_data.copy()
+            converted_count = 0
+            total_unconverted = 0
+            
+            print(f"🔄 Starting batch 3D conversion for {len(gallery_data)} items...")
+            
+            # First pass: identify unconverted items and mark them as generating
+            for idx, obj in enumerate(updated_data):
+                if not obj.get("glb_path") and not obj.get("3d_generating", False):
+                    updated_data[idx]["3d_generating"] = True
+                    total_unconverted += 1
+                    print(f"  📋 Queued '{obj['title']}' for 3D conversion")
+            
+            if total_unconverted == 0:
+                print("✅ All items already have 3D models or are being generated")
+                return updated_data
+            
+            print(f"🔄 Converting {total_unconverted} items to 3D...")
+            
+            # Second pass: generate 3D models for each unconverted item
+            for idx, obj in enumerate(updated_data):
+                if obj.get("3d_generating", False):
+                    object_name = obj["title"]
+                    image_path = obj["path"]
+                    
+                    print(f"  🔄 Converting '{object_name}' to 3D...")
+                    
+                    # Set output directory for generated 3D models
+                    output_dir = config.MODELS_DIR
+                    
+                    # Generate 3D model using Model3DService
+                    success, message, glb_path = model_3d_service.generate_3d_model(
+                        image_path=image_path,
+                        output_dir=output_dir
+                    )
+                    
+                    if success and glb_path:
+                        # Update the gallery data with the 3D model path
+                        updated_data[idx]["glb_path"] = glb_path
+                        updated_data[idx]["3d_generated"] = True
+                        updated_data[idx]["3d_timestamp"] = datetime.datetime.now().isoformat()
+                        updated_data[idx]["3d_generating"] = False  # Mark as complete
+                        converted_count += 1
+                        print(f"  ✅ Successfully converted '{object_name}' to 3D: {glb_path}")
+                    else:
+                        # Mark generation as failed
+                        updated_data[idx]["3d_generating"] = False
+                        print(f"  ❌ Failed to convert '{object_name}' to 3D: {message}")
+            
+            print(f"✅ Batch 3D conversion complete: {converted_count}/{total_unconverted} items converted")
+            return updated_data
+            
+        except Exception as e:
+            print(f"❌ Error in batch 3D conversion: {str(e)}")
+            # Reset any items that were marked as generating but failed
+            updated_data = gallery_data.copy()
+            for idx, obj in enumerate(updated_data):
+                if obj.get("3d_generating", False):
+                    updated_data[idx]["3d_generating"] = False
+            return updated_data
+    
+    return convert_all_to_3d
 
 def create_image_card(image_path, title, output_widget, modal_image_title, modal_image, modal_visible, settings_modal, overlay):
     """Create a single image card with action buttons and modal trigger."""
@@ -88,7 +161,8 @@ def create_refresh_handler(image_generation_service):
             new_seed = random.randint(1, 999999)
             
             # Set output directory for generated images
-            output_dir = os.path.join(os.path.dirname(__file__), "..", "static", "images", "generated")
+            import config
+            output_dir = config.GENERATED_IMAGES_DIR
             
             print(f"🔄 Refreshing image for '{object_name}' with seed {new_seed}")
             print(f"   Prompt: {prompt}")
@@ -153,7 +227,7 @@ def create_3d_generation_handler(model_3d_service):
                 print(f"⚠️ 3D generation not marked as in progress, but continuing...")
             
             # Set output directory for generated 3D models
-            output_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "models")
+            output_dir = config.MODELS_DIR
               
             # Generate 3D model using Model3DService
             success, message, glb_path = model_3d_service.generate_3d_model(

@@ -9,15 +9,15 @@ from griptape.structures import Agent
 from griptape.drivers.prompt.openai import OpenAiChatPromptDriver
 from griptape.memory.structure import ConversationMemory
 from griptape.rules import Rule
+import config
 
 # Set up logging
 logging.basicConfig(level="INFO", format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Configuration
-AGENT_MODEL = "meta/llama-3.1-8b-instruct"
-AGENT_BASE_URL = "http://localhost:19002/v1"
-MAX_PROMPT_LENGTH = 50
+AGENT_MODEL = config.AGENT_MODEL
+AGENT_BASE_URL = config.AGENT_BASE_URL
 
 
 class RuleType(Enum):
@@ -42,8 +42,8 @@ class LLMAgent:
             Rule("Your primary task is to suggest objects for the 3D scene based on user requests."),
             Rule("Always suggest objects in singular form (e.g., 'Palm Tree' instead of 'Palm Trees')."),
             Rule("Always format object names with proper capitalization and spaces (e.g., 'Coffee Table' not 'coffee_table')."),
-            Rule("When suggesting objects for a general scene request: Suggest exactly 20 objects that would be appropriate for this scene."),
-            Rule("Always format your object suggestions in this exact format: Suggested objects: 1. object_name 2. object_name ... 20. object_name"),
+            Rule(f"When suggesting objects for a general scene request: Suggest exactly {config.NUM_OF_OBJECTS} objects that would be appropriate for this scene."),
+            Rule(f"Always format your object suggestions in this exact format: Suggested objects: 1. object_name 2. object_name ... {config.NUM_OF_OBJECTS}. object_name"),
             Rule("Focus only on suggesting appropriate objects for the scene based on the user's requests."),
         ]
     
@@ -54,7 +54,7 @@ class LLMAgent:
             Rule("The descriptions should be highly detailed and visually rich, suitable for a text-to-image generation model."),
             Rule("The prompt must specify a plain or empty background (e.g., 'on a white background', 'isolated', 'no background')."),
             Rule("Focus ONLY on the physical and visual characteristics of each object itself."),
-            Rule("Keep each object's prompt to exactly 30 words or less for optimal generation quality."),
+            Rule(f"Keep each object's prompt to exactly {config.TWO_D_PROMPT_LENGTH} words or less for optimal generation quality."),
             Rule("Generate a separate prompt for each object in the scene."),
             Rule("Format each object's prompt with 'Object:' and 'Prompt:' labels."),
             Rule("Do not add any explanatory notes or comments after the prompt."),
@@ -163,10 +163,10 @@ class AgentService:
             # Create a specific prompt for generating 20 objects
             prompt = f"""Based on this scene description: "{scene_description}"
 
-Please suggest exactly 20 objects that would be appropriate for this scene. 
+Please suggest exactly {config.NUM_OF_OBJECTS} objects that would be appropriate for this scene. 
 
 Requirements:
-- Suggest exactly 20 objects (no more, no less)
+- Suggest exactly {config.NUM_OF_OBJECTS} objects (no more, no less)
 - Use singular form for all objects (e.g., 'Chair' not 'Chairs')
 - Use proper capitalization and spaces (e.g., 'Coffee Table' not 'coffee_table')
 - Focus on objects that would realistically be found in this type of scene
@@ -178,7 +178,7 @@ Suggested objects:
 2. object_name
 3. object_name
 ...
-20. object_name
+{config.NUM_OF_OBJECTS}. object_name
 
 Scene arrangement: [Brief description of how these objects could be arranged together]"""
 

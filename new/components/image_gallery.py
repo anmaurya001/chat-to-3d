@@ -2,8 +2,10 @@
 
 import gradio as gr
 from components.image_card import create_image_card
+import config
 
-MAX_CARDS = 20
+MAX_CARDS = config.MAX_CARDS
+CARDS_PER_ROW = config.CARDS_PER_ROW
 
 def create_image_gallery():
     """Create the object gallery interface."""
@@ -35,13 +37,12 @@ def create_image_gallery():
                 )
         
         # Create cards in a responsive grid using Gradio's native layout
-        cards_per_row = 4  # Adjust this number to control cards per row
         card_components = []
         card_containers = []
         
-        for row_start in range(0, MAX_CARDS, cards_per_row):
+        for row_start in range(0, MAX_CARDS, CARDS_PER_ROW):
             with gr.Row() as row:
-                for col_idx in range(cards_per_row):
+                for col_idx in range(CARDS_PER_ROW):
                     card_idx = row_start + col_idx
                     if card_idx < MAX_CARDS:
                         # Use scale=1 to fill available space, but with min_width to maintain consistency
@@ -53,6 +54,16 @@ def create_image_gallery():
                             card_components.append(card)
                             card_containers.append(card_container)
         
+        # Add "Convert all to 3D" button at the bottom
+        with gr.Row(elem_classes=["convert-all-section"]):
+            convert_all_btn = gr.Button(
+                "Convert all to 3D", 
+                #size="lg", 
+                #variant="primary",
+                elem_classes=["convert-all-btn"],
+                visible=False  # Initially hidden, will be shown when gallery has items
+            )
+        
         # Utility: get all card outputs
         def get_all_card_outputs():
             outputs = []
@@ -60,6 +71,7 @@ def create_image_gallery():
                 outputs.extend([card["title_component"], card["image_component"], card["refresh_btn"], card["edit_btn"], card["delete_btn"], card["to_3d_btn"]])
             outputs.extend(card_containers)
             outputs.append(placeholder_container)  # Add placeholder to outputs
+            outputs.append(convert_all_btn)  # Add convert all button to outputs
             return outputs
         
         # Logic functions
@@ -142,6 +154,15 @@ def create_image_gallery():
             # Show/hide placeholder based on whether gallery has items
             updates.append(gr.update(visible=(len(gallery_data) == 0)))
             
+            # Show/hide convert all button based on whether there are unconverted items
+            has_unconverted_items = any(
+                idx < len(gallery_data) and 
+                not gallery_data[idx].get("glb_path") and 
+                not gallery_data[idx].get("3d_generating", False)
+                for idx in range(len(gallery_data))
+            )
+            updates.append(gr.update(visible=has_unconverted_items))
+            
             print(f"✅ Gallery UI updated with {len(gallery_data)} visible cards")
             return updates
         
@@ -163,6 +184,7 @@ def create_image_gallery():
         "card_components": card_components,
         "card_containers": card_containers,
         "placeholder": placeholder_container,
+        "convert_all_btn": convert_all_btn,
         "get_all_card_outputs": get_all_card_outputs,
         "shift_card_ui": shift_card_ui,
     } 

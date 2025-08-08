@@ -549,6 +549,19 @@
     resize: none !important;
 }
 
+/* Convert All to 3D Button Styles */
+.convert-all-section {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    padding: 16px 0;
+    border-top: 1px solid #e5e5e5;
+    width: 100%;
+}
+
+.convert-all-btn {
+    width: 100% !important;
+}
+
 /* Responsive adjustments for the new layout */
 @media (max-width: 768px) {
     .right-panel {
@@ -564,6 +577,12 @@
     .dynamic-accordion .accordion-content {
         padding: 10px 12px !important;
         font-size: 12px !important;
+    }
+    
+    .convert-all-btn {
+        font-size: 14px !important;
+        padding: 10px 20px !important;
+        min-width: 160px !important;
     }
 }
 
