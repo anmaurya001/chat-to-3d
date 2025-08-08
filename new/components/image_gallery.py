@@ -97,27 +97,29 @@ def create_image_gallery():
                     updates.append(gr.update(value=f"### {obj['title']}"))
                     updates.append(gr.update(value=obj["path"]))
                     
-                    # Check if 3D generation is in progress to disable other buttons
+                    # Check if 3D generation is in progress or batch processing to disable other buttons
                     is_3d_generating = obj.get("3d_generating", False)
+                    is_batch_processing = obj.get("batch_processing", False)
+                    is_processing = is_3d_generating or is_batch_processing
                     
                     # Update refresh button state
-                    refresh_interactive = not is_3d_generating
+                    refresh_interactive = not is_processing
                     refresh_classes = ["action-btn"]
-                    if is_3d_generating:
+                    if is_processing:
                         refresh_classes.append("disabled-btn")
                     updates.append(gr.update(interactive=refresh_interactive, elem_classes=refresh_classes))
                     
                     # Update edit button state
-                    edit_interactive = not is_3d_generating
+                    edit_interactive = not is_processing
                     edit_classes = ["action-btn"]
-                    if is_3d_generating:
+                    if is_processing:
                         edit_classes.append("disabled-btn")
                     updates.append(gr.update(interactive=edit_interactive, elem_classes=edit_classes))
                     
                     # Update delete button state
-                    delete_interactive = not is_3d_generating
+                    delete_interactive = not is_processing
                     delete_classes = ["action-btn"]
-                    if is_3d_generating:
+                    if is_processing:
                         delete_classes.append("disabled-btn")
                     updates.append(gr.update(interactive=delete_interactive, elem_classes=delete_classes))
                     
@@ -129,6 +131,11 @@ def create_image_gallery():
                         button_classes = ["action-btn", "three-d-completed"]
                     elif "3d_generating" in obj and obj["3d_generating"]:
                         # 3D generation in progress
+                        button_text = "⏳ 3D"
+                        button_interactive = False
+                        button_classes = ["action-btn", "three-d-generating"]
+                    elif is_batch_processing:
+                        # Batch processing - disable button
                         button_text = "⏳ 3D"
                         button_interactive = False
                         button_classes = ["action-btn", "three-d-generating"]
@@ -155,13 +162,24 @@ def create_image_gallery():
             updates.append(gr.update(visible=(len(gallery_data) == 0)))
             
             # Show/hide convert all button based on whether there are unconverted items
+            # and whether batch processing is in progress
             has_unconverted_items = any(
                 idx < len(gallery_data) and 
                 not gallery_data[idx].get("glb_path") and 
                 not gallery_data[idx].get("3d_generating", False)
                 for idx in range(len(gallery_data))
             )
-            updates.append(gr.update(visible=has_unconverted_items))
+            
+            # Check if any item is in batch processing mode
+            is_batch_processing = any(
+                idx < len(gallery_data) and 
+                gallery_data[idx].get("batch_processing", False)
+                for idx in range(len(gallery_data))
+            )
+            
+            # Show button only if there are unconverted items and no batch processing
+            show_convert_all = has_unconverted_items and not is_batch_processing
+            updates.append(gr.update(visible=show_convert_all))
             
             print(f"✅ Gallery UI updated with {len(gallery_data)} visible cards")
             return updates

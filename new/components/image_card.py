@@ -24,13 +24,32 @@ def invalidate_3d_model(gallery_data, card_idx, object_name, context="image chan
     # Reset 3D generation state to allow new generation
     updated_data[card_idx]["3d_generating"] = False
     
+    # Clear batch processing flag if it was set
+    if "batch_processing" in updated_data[card_idx]:
+        del updated_data[card_idx]["batch_processing"]
+    
     print(f"🔄 3D model invalidated - '→ 3D' button re-enabled")
     return updated_data
 
 def create_convert_all_3d_handler(model_3d_service):
     """Create a handler that converts all unconverted images to 3D models."""
-    def convert_all_to_3d(gallery_data):
-        """Convert all images that haven't been converted to 3D yet."""
+    
+    def disable_all_buttons(gallery_data):
+        """First stage: disable all buttons by marking all items as batch processing."""
+        if not gallery_data:
+            return gallery_data
+        
+        updated_data = gallery_data.copy()
+        
+        # Mark all items as being processed in batch mode to disable all buttons
+        for idx, obj in enumerate(updated_data):
+            updated_data[idx]["batch_processing"] = True
+        
+        print(f"🔒 Disabled all buttons for {len(gallery_data)} items during batch 3D conversion")
+        return updated_data
+    
+    def perform_batch_3d_conversion(gallery_data):
+        """Second stage: perform the actual 3D conversion."""
         try:
             if not gallery_data:
                 print("❌ No gallery data to process")
@@ -51,6 +70,9 @@ def create_convert_all_3d_handler(model_3d_service):
             
             if total_unconverted == 0:
                 print("✅ All items already have 3D models or are being generated")
+                # Clear batch_processing flag for all items
+                for idx in range(len(updated_data)):
+                    updated_data[idx]["batch_processing"] = False
                 return updated_data
             
             print(f"🔄 Converting {total_unconverted} items to 3D...")
@@ -85,6 +107,10 @@ def create_convert_all_3d_handler(model_3d_service):
                         updated_data[idx]["3d_generating"] = False
                         print(f"  ❌ Failed to convert '{object_name}' to 3D: {message}")
             
+            # Final pass: clear batch_processing flag for all items
+            for idx in range(len(updated_data)):
+                updated_data[idx]["batch_processing"] = False
+            
             print(f"✅ Batch 3D conversion complete: {converted_count}/{total_unconverted} items converted")
             return updated_data
             
@@ -95,9 +121,11 @@ def create_convert_all_3d_handler(model_3d_service):
             for idx, obj in enumerate(updated_data):
                 if obj.get("3d_generating", False):
                     updated_data[idx]["3d_generating"] = False
+                # Clear batch_processing flag
+                updated_data[idx]["batch_processing"] = False
             return updated_data
     
-    return convert_all_to_3d
+    return disable_all_buttons, perform_batch_3d_conversion
 
 def create_image_card(image_path, title, output_widget, modal_image_title, modal_image, modal_visible, settings_modal, overlay):
     """Create a single image card with action buttons and modal trigger."""
@@ -183,6 +211,10 @@ def create_refresh_handler(image_generation_service):
                 
                 # Invalidate 3D model using the helper function
                 updated_data = invalidate_3d_model(updated_data, card_idx, object_name, "image refresh")
+                
+                # Clear batch processing flag if it was set
+                if "batch_processing" in updated_data[card_idx]:
+                    del updated_data[card_idx]["batch_processing"]
                 
                 print(f"✅ Successfully refreshed image: {new_image_path}")
                 return updated_data

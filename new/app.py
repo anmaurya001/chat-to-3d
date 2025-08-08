@@ -226,8 +226,8 @@ def create_app():
         # Create 3D generation handler
         three_d_handler = create_3d_generation_handler(model_3d_service)
         
-        # Create convert all to 3D handler
-        convert_all_handler = create_convert_all_3d_handler(model_3d_service)
+        # Create convert all to 3D handler (two-stage process)
+        disable_buttons_handler, convert_all_handler = create_convert_all_3d_handler(model_3d_service)
         
         def update_modal_3d_components(gallery_data, card_idx):
             """Update modal 3D components based on 3D model availability."""
@@ -361,8 +361,12 @@ def create_app():
                     updated_data[edit_idx]["path"] = new_image_path
                     updated_data[edit_idx]["seed"] = new_seed
                     
-                    # Invalidate 3D model using the helper function
-                    updated_data = invalidate_3d_model(updated_data, edit_idx, object_name, "image update")
+                                    # Invalidate 3D model using the helper function
+                updated_data = invalidate_3d_model(updated_data, edit_idx, object_name, "image update")
+                
+                # Clear batch processing flag if it was set
+                if "batch_processing" in updated_data[edit_idx]:
+                    del updated_data[edit_idx]["batch_processing"]
                     
                     print(f"✅ Successfully generated new image: {new_image_path}")
                 else:
@@ -384,8 +388,16 @@ def create_app():
             outputs=[edit_modal, edit_current_index, edit_image_title, edit_description]
         )
         
-        # Wire up convert all to 3D button
+        # Wire up convert all to 3D button (two-stage process)
         gallery_components["convert_all_btn"].click(
+            fn=disable_buttons_handler,
+            inputs=[gallery_components["data"]],
+            outputs=[gallery_components["data"]]
+        ).then(
+            fn=gallery_components["shift_card_ui"],
+            inputs=[gallery_components["data"]],
+            outputs=gallery_components["get_all_card_outputs"]()
+        ).then(
             fn=convert_all_handler,
             inputs=[gallery_components["data"]],
             outputs=[gallery_components["data"]]
