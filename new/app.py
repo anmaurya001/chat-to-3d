@@ -12,6 +12,7 @@ import os
 import base64
 from components.chat_interface import create_chat_interface, handle_scene_description
 from components.image_gallery import create_image_gallery
+from components.blender_export import create_blender_export_section
 from components.status_panel import create_status_panel
 from components.modal import create_modal, open_image_settings, close_modal, create_edit_modal
 from components.image_card import create_refresh_handler, create_3d_generation_handler, create_convert_all_3d_handler, invalidate_3d_model
@@ -98,6 +99,9 @@ def create_app():
                 
                 # Object gallery
                 gallery_components = create_image_gallery()
+                
+                # Blender export section
+                export_components = create_blender_export_section()
                 
                 # Modal UI
                 modal_visible = gr.State(False)

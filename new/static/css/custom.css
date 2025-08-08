@@ -141,6 +141,7 @@
     height: 44px;
     box-sizing: border-box;
     text-align: center;
+    margin-left: 16px !important;
 }
 
 .scene-input::placeholder {
@@ -155,6 +156,7 @@
 
 .send-button {
     background: #f3f4f6 !important;
+    margin-left: 16px !important;
     border: 1px solid #d1d5db !important;
     border-radius: 6px !important;
     padding: 8px 12px !important;
@@ -184,7 +186,7 @@
 
 /* Gallery Section Header */
 .gallery-header {
-    margin-bottom: 16px;
+    margin-bottom: 8px !important;
     font-size: 18px;
     font-weight: 600;
     color: #111827;
@@ -554,12 +556,16 @@
     margin-top: 24px;
     margin-bottom: 16px;
     padding: 16px 0;
-    border-top: 1px solid #e5e5e5;
     width: 100%;
 }
 
 .convert-all-btn {
     width: 100% !important;
+}
+
+/* Reduce spacing between gallery and blender export section */
+.blender-export-section {
+    margin-top: 2px !important;
 }
 
 /* Responsive adjustments for the new layout */
